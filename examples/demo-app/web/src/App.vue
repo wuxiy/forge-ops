@@ -64,29 +64,51 @@ const loading = ref(false)
 const loaded = ref(false)
 const error = ref('')
 
+// 弱网优化：单次查询最长等待 8 秒，超时中止并提示；新查询会取消上一个在途请求。
+const REQUEST_TIMEOUT_MS = 8000
+let requestSeq = 0
+let abortController: AbortController | null = null
+
 function saveUser() {
   localStorage.setItem('demo-user', user.value)
 }
 
 async function load() {
   if (!patientId.value) return
+  abortController?.abort()
+  const controller = new AbortController()
+  abortController = controller
+  const seq = ++requestSeq
+
   loading.value = true
   error.value = ''
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
-    const res = await fetch(`/api/patients/${encodeURIComponent(patientId.value)}/records`)
+    const res = await fetch(`/api/patients/${encodeURIComponent(patientId.value)}/records`, {
+      signal: controller.signal,
+    })
     if (!res.ok) {
       throw new Error(`查询失败（${res.status}），请稍后重试`)
     }
     const data = await res.json()
+    if (seq !== requestSeq) return // 已被更新的查询取代，丢弃过期响应
     records.value = data.records ?? []
     loaded.value = true
   } catch (e) {
-    // 请求失败或响应非 JSON 时复位 loading 并展示错误提示，避免页面停留在「加载中…」。
+    if (seq !== requestSeq) return // 已被更新的查询取代，loading 由新请求负责
+    // 请求失败、超时或响应非 JSON 时复位 loading 并展示提示，避免页面停留在「加载中…」。
     records.value = []
     loaded.value = false
-    error.value = e instanceof Error ? e.message : '查询失败，请稍后重试'
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      error.value = `查询超时（${REQUEST_TIMEOUT_MS / 1000} 秒），请检查网络后重试`
+    } else {
+      error.value = e instanceof Error ? e.message : '查询失败，请稍后重试'
+    }
   } finally {
-    loading.value = false
+    clearTimeout(timer)
+    if (seq === requestSeq) {
+      loading.value = false
+    }
   }
 }
 
