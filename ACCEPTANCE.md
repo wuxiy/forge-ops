@@ -3,6 +3,74 @@
 > 依据：`forgeops-architecture-v0.1.md` + `环境要求.md` + 2026-08-15 方案确认（全闭环 0+1+2+3 / Multica 升级最新 / monorepo 内 demo-app 试点 / SDK 内验证入口）。
 > 每项验收均以**实际运行**为准，通过标准 = 操作/命令 + 期望结果全部命中。
 
+## ⏱ 验收记录（2026-08-15 实跑结果）
+
+### A. Phase 0 — 基础打底
+
+| # | 结果 | 证据 |
+|---|---|---|
+| A1 | ✅ | `multica-pre-upgrade-20260815-012839.sql.gz`（1.6M）留存于 59 `/root/backups/multica/` |
+| A2 | ✅ | fork 合并上游 main（bbb8a5cd），容器重建 healthy；DB 迁移 186→277+ 自动执行；原有数据保留（cywu workspace、issue 均在）；UI :13000 可登录 |
+| A3 | ✅ | 本地 CLI 0.4.26（brew 升级），`multica auth status` 指向 18080 用户 wuxi 有效 |
+| A4 | ✅ | `multica daemon status`：running，检测到 claude 等 7 个 CLI，watch 2 workspace |
+| A5 | ✅ | engineering workspace（ENG 前缀）+ forgeops-triage/forgeops-coding 双 Agent（claude runtime online）+ 对应 Skill 已挂载 |
+| A6 | ✅* | Issue ENG-1 → Coding Agent 自主 SSH clone → 分支 `feature/agent/A6-TEST` → commit e88f910 → push 远端可见；**Draft PR 创建因无 gh/GitHub Token 走降级路径**（compare 链接），真 PR 待 P1 PAT |
+
+### B. Phase 1 — 反馈入口 + Gateway + Context Pack
+
+| # | 结果 | 证据 |
+|---|---|---|
+| B1 | ✅ | demo 页面查询 P-99999：接口 500（后端越界）+ 页面持续「加载中…」；P-10001 正常显示 3 条记录 |
+| B2 | ✅ | SDK 面板自动上下文预览：URL/标题/前后端 version+commit/UA/屏幕 2560x1440/2 条失败请求含 requestId/console 错误；payload 无任何 Header/Body/凭据字段 |
+| B3 | ✅ | demo-api ACCESS 结构化日志含 requestId（与 SDK 缓冲一致）、status、durationMs、version、commitSha、exception |
+| B4 | ✅ | 浏览器真实提交 → 201 返回 `FB-1002` → forgeops_feedback/forgeops_context 各 1 行 |
+| B5 | ✅ | context_json 符合 schema 1.0；failed request 的日志摘录自动补齐（含 ArrayIndexOutOfBoundsException 证据行） |
+| B6 | ✅ | `GET /api/v1/projects/demo-app/config` 返回完整 YAML 解析结果（repo/branch/agents/policy） |
+| B7 | ✅ | Multica Issue ENG-3 按 §13.1 模板自动创建并指派 triage agent；multica_issue_id/url 回写；状态 SUBMITTED→CONTEXT_BUILDING→TRIAGING |
+| B8 | ✅ | 手机号 13812345678 在落库描述中呈现为 `***MASKED***`（Gateway Sanitizer）；SDK 端白名单预览可见；PiiSanitizerTest 5 用例通过 |
+| B9 | ✅ | forgeops_integration_event 记录 6 条（两轮 git/ci/deployment）；错误 secret → 401 |
+
+### C. Phase 2 — Agent 闭环
+
+| # | 结果 | 证据 |
+|---|---|---|
+| C1 | ✅ | Triage 输出完整结构化报告：分类/影响/根因（前后端双缺陷精确定位 PatientController.java:39 与 App.vue catch 块）/证据（引用 requestId 日志）/相关文件/风险/建议方案/`TRIAGE_RESULT: PROCEED_CODING` |
+| C2 | ✅ | Poller 自动 TRIAGING→CODING，ENG-3 重指派 forgeops-coding，agent 状态 working |
+| C3 | ✅* | 分支 `feature/agent/FB-1002`（592f578）含修复 commit + 测试；评论含 §15 模板六段 + PR_URL + CODING_RESULT；`mvn test` 2/2 + `pnpm typecheck` 通过；**PR 为 PR_PENDING_MANUAL 降级路径**（同 A6 凭据缺口）；Reopen 二轮产出 ce2f851（弱网 loading 竞态修复） |
+| C4 | ✅ | 检出分支实跑：P-99999 → 200 + total=0 + 空态正常显示；P-10001 → 200 + total=3 不受影响 |
+| C5 | ✅ | pr_url 回写；CODING→PR_REVIEW；SDK「我的反馈」显示「待发布」 |
+
+### D. Phase 3 — 验证闭环（模拟回调）
+
+| # | 结果 | 证据 |
+|---|---|---|
+| D1 | ✅ | git 回调 → PR_REVIEW→BUILDING；重复 externalEventId → DUPLICATED；AGENT 冒充 merge → 拒绝（Human Gate） |
+| D2 | ✅ | ci 回调 → DEPLOYING；pipelineId 回写 |
+| D3 | ✅ | deployment 回调 → WAITING_VERIFY；版本 0.1.1-test/0.1.2-test 回写；SDK 列表「待验证」；时间线含待验证通知 |
+| D4 | ✅ | SDK 点[验证通过]（附说明）→ DONE；Multica ENG-3=done；verification 记录 PASS |
+| D5 | ✅ | SDK 点[仍有问题]（附说明）→ 原 FB-1002 REOPENED→TRIAGING（**未新建 Issue**）；forgeops_context 追加 REOPEN_APPEND 快照；ENG-3 重开+重指派；Agent 二轮修复产出新分支；全程禁止孤立 Bug |
+| D6 | ✅ | 全流程实测经过：待处理→AI 分析中→开发处理中→待发布→待验证→已完成（六态）；「需要补充」态由 FeedbackStatusTest 映射单测覆盖 |
+| D7 | ✅ | forgeops_audit_log 27 条：提交/Issue 创建/Triage/分支/人工 merge/CI/部署/Reopen/二轮/验证全链路可追溯 |
+
+### E. 交付物与工程规范
+
+| # | 结果 | 证据 |
+|---|---|---|
+| E1 | ✅ | monorepo 结构与 §21 一致（gateway/sdk/examples/registry/schemas/multica/policy/deploy/docs） |
+| E2 | ✅ | `deploy/docker-compose/forgeops.yml` + `forgeops.env.example` + gateway Dockerfile + `deploy/nginx/forgeops-gateway.conf`（:18090）交付 |
+| E3 | ✅ | docs/integration-guide.md：SDK 5 步接入 / Request-ID 链路 / 三回调契约（含 payload 示例） |
+| E4 | ✅ | Gateway `mvn verify`：13 tests，BUILD SUCCESS（sanitizer/状态机/幂等/HumanGate/ContextPack） |
+| E5 | ✅ | autoMerge/autoDeploy 硬编码 false（HumanGate）；AGENT merge 回调实测被拒；Agent 仅持 forge-ops 仓库访问（SSH key） |
+
+### 唯一遗留：P1 GitHub PAT
+
+- A6/C3 的「GitHub 上可见 Draft PR（gh 自动创建）」降级为 PR_PENDING_MANUAL（分支已推送 + compare 链接），因环境无 gh CLI / GitHub Token（浏览器亦无登录会话）。
+- **补齐方式**（二选一）：① 提供 PAT（仅 wuxiy/forge-ops、contents:write + pull-requests:write）→ `multica agent env set forgeops-coding FORGEOPS_GITHUB_TOKEN=xxx`，Agent 即可全自动创建 Draft PR；② 人工点击 compare 链接创建（流程其余环节不受影响）。
+
+---
+
+以下为原始验收清单（定义）。
+
 ## 0. 已确认的关键决定
 
 | # | 决定 | 结论 |

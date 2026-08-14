@@ -280,15 +280,16 @@ async function openDetail(id: string) {
 async function verify(pass: boolean) {
   if (!ctx || !detail.value) return
   verifyError.value = ''
+  const verifier = ctx.getReporter()?.name || mineReporter.value || 'unknown'
   try {
     if (pass) {
-      await ctx.client.verifyPass(detail.value.id, verifyNote.value || undefined)
+      await ctx.client.verifyPass(detail.value.id, verifier, verifyNote.value || undefined)
     } else {
       if (!verifyNote.value.trim()) {
         verifyError.value = '请填写“仍有问题”的具体说明（验证说明必填）'
         return
       }
-      await ctx.client.verifyFail(detail.value.id, verifyNote.value, {
+      await ctx.client.verifyFail(detail.value.id, verifier, verifyNote.value, {
         requests: ctx.collector.failedRequests(),
         consoleErrors: ctx.collector.consoleErrorList(),
       })

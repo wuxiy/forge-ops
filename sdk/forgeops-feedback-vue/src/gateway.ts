@@ -42,17 +42,17 @@ export class ForgeOpsGatewayClient {
     })
   }
 
-  verifyPass(id: string, comment?: string): Promise<unknown> {
+  verifyPass(id: string, verifierName: string, comment?: string): Promise<unknown> {
     return this.request(`/api/v1/feedback/${encodeURIComponent(id)}/verify`, {
       method: 'POST',
-      body: JSON.stringify({ result: 'PASS', comment }),
+      body: JSON.stringify({ result: 'PASS', verifierName, comment }),
     })
   }
 
-  verifyFail(id: string, comment: string, extra?: { requests?: RequestSummary[]; consoleErrors?: string[] }): Promise<unknown> {
+  verifyFail(id: string, verifierName: string, comment: string, extra?: { requests?: RequestSummary[]; consoleErrors?: string[] }): Promise<unknown> {
     return this.request(`/api/v1/feedback/${encodeURIComponent(id)}/reopen`, {
       method: 'POST',
-      body: JSON.stringify({ comment, requests: extra?.requests || [], consoleErrors: extra?.consoleErrors || [] }),
+      body: JSON.stringify({ verifierName, comment, requests: extra?.requests || [], consoleErrors: extra?.consoleErrors || [] }),
     })
   }
 }
