@@ -1,0 +1,25 @@
+# ForgeOps Gateway 部署（172.16.65.59，复用现有 PG 与 nginx）
+#
+# 前置：
+#   1. 在 multica-postgres 中已创建 forgeops 库（见 docs/integration-guide.md）
+#   2. gateway 镜像已构建：在仓库根目录
+#      docker build -t forgeops-gateway:dev -f gateway/forgeops-gateway/Dockerfile .
+#
+# 启动：
+#   docker compose -f deploy/docker-compose/forgeops.yml up -d
+#   （env 见同目录 forgeops.env）
+name: forgeops
+
+services:
+  gateway:
+    image: forgeops-gateway:dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18091:8080"
+    env_file:
+      - forgeops.env
+    volumes:
+      - ./data/screenshots:/app/data/screenshots
+      - ./registry:/app/registry:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

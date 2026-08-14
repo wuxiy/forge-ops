@@ -1,0 +1,28 @@
+# PII 策略：SDK 白名单采集 + Gateway Sanitizer 双重防线
+version: 1
+
+profiles:
+  healthcare-strict:
+    # SDK 侧：白名单字段之外一律不采集（见 schemas/feedback.schema.json additionalProperties=false）
+    sdk:
+      mode: whitelist
+      forbiddenHeaders: [Authorization, Cookie, X-Api-Key, Proxy-Authorization]
+      forbiddenPayloadKeys: [password, token, secret, authorization, cookie]
+      neverCollect:
+        - fullRequestBody
+        - fullResponseBody
+    # Gateway 侧：对自由文本与 URL 做正则脱敏
+    sanitizer:
+      maskPatterns:
+        chinaIdCard: '\b[1-9]\d{5}(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b'
+        chinaMobile: '\b1[3-9]\d{9}\b'
+        medicalRecordNo: '\b(病历号[:：]?\s*)([A-Za-z0-9-]{4,})\b'
+        email: '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
+      maskReplacement: '***MASKED***'
+      fields:
+        - feedback.title
+        - feedback.description
+        - feedback.expectedBehavior
+        - feedback.steps
+        - feedback.note
+        - requests[].url

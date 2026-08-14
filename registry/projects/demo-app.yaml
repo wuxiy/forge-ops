@@ -1,0 +1,54 @@
+id: demo-app
+name: Demo App（ForgeOps 试点）
+
+feedback:
+  enabled: true
+
+frontend:
+  framework: vue
+  repo: wuxiy/forge-ops
+  repoProvider: github
+  path: examples/demo-app/web
+  defaultBranch: dev
+
+backend:
+  framework: springboot
+  repo: wuxiy/forge-ops
+  repoProvider: github
+  path: examples/demo-app/api
+  defaultBranch: dev
+
+runtime:
+  pool: forgeops-local
+
+observability:
+  logs:
+    # V0.1 demo: demo-api exposes per-requestId log lookup (replaces a real ES query).
+    type: http-request-log
+    service: demo-api
+    baseUrl: http://127.0.0.1:8081
+
+multica:
+  workspace: engineering
+  project: demo-app
+  triageAgent: forgeops-triage
+  codingAgent: forgeops-coding
+
+ci:
+  provider: simulated
+  pipeline: demo-app-test
+
+environments:
+  test:
+    frontendUrl: http://localhost:5173
+    backendUrl: http://localhost:8081
+
+policy:
+  autoAnalyze: true
+  autoCode: true
+  autoPR: true
+  autoMerge: false
+  autoDeploy: false
+
+security:
+  piiProfile: healthcare-strict

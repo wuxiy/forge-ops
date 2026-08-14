@@ -1,0 +1,42 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: forgeops-gateway
+  datasource:
+    url: ${FORGEOPS_DB_URL:jdbc:postgresql://172.16.65.59:5432/forgeops}
+    username: ${FORGEOPS_DB_USER:forgeops}
+    password: ${FORGEOPS_DB_PASSWORD:forgeops}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+forgeops:
+  # Project Registry：monorepo 内 registry/projects 目录（相对 gateway 运行目录或绝对路径）
+  registry:
+    path: ${FORGEOPS_REGISTRY_PATH:../../registry/projects}
+  multica:
+    base-url: ${FORGEOPS_MULTICA_BASE_URL:http://172.16.65.59:18080}
+    token: ${FORGEOPS_MULTICA_TOKEN:}
+    workspace-id: ${FORGEOPS_MULTICA_WORKSPACE_ID:}
+    # web 前端地址，用于拼接 Issue URL
+    app-url: ${FORGEOPS_MULTICA_APP_URL:http://172.16.65.59:13000}
+  callback:
+    # 回调共享 secret，空 = 不校验（仅内网调试）
+    secret: ${FORGEOPS_CALLBACK_SECRET:forgeops-dev-secret}
+  poller:
+    enabled: ${FORGEOPS_POLLER_ENABLED:true}
+    fixed-delay-ms: 10000
+  storage:
+    screenshot-dir: ${FORGEOPS_SCREENSHOT_DIR:./data/screenshots}
+  pii:
+    # 与 policy/pii-policy.yaml 对齐的兜底配置（优先读 policy 文件）
+    enabled: true
+
+logging:
+  level:
+    com.company.forgeops: INFO

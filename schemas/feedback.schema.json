@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forgeops.local/schemas/feedback.schema.json",
+  "title": "ForgeOps Feedback Submission",
+  "description": "Feedback SDK -> ForgeOps Gateway intake payload (v1.0). Whitelist-only collection: anything not declared here must be dropped by the SDK.",
+  "type": "object",
+  "required": ["projectId", "type", "description", "reporter"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "projectId": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "type": { "enum": ["BUG", "OPTIMIZATION", "REQUIREMENT"] },
+    "title": { "type": "string", "maxLength": 120 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 8000 },
+    "expectedBehavior": { "type": "string", "maxLength": 4000 },
+    "steps": { "type": "string", "maxLength": 4000 },
+    "note": { "type": "string", "maxLength": 4000 },
+    "reporter": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "environment": { "enum": ["test", "uat", "staging"] },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "maxLength": 512 },
+        "route": { "type": "string", "maxLength": 256 },
+        "title": { "type": "string", "maxLength": 256 }
+      }
+    },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "userAgent": { "type": "string", "maxLength": 512 },
+        "platform": { "type": "string", "maxLength": 128 },
+        "language": { "type": "string", "maxLength": 32 },
+        "screen": { "type": "string", "maxLength": 32 },
+        "viewport": { "type": "string", "maxLength": 32 }
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string", "maxLength": 64 },
+        "commit": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string", "maxLength": 64 },
+        "commit": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "requests": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": ["method", "url", "time"],
+        "additionalProperties": false,
+        "properties": {
+          "method": { "type": "string", "maxLength": 8 },
+          "url": { "type": "string", "maxLength": 512 },
+          "status": { "type": "integer" },
+          "durationMs": { "type": "integer" },
+          "requestId": { "type": "string", "maxLength": 64 },
+          "traceId": { "type": "string", "maxLength": 64 },
+          "time": { "type": "string" }
+        }
+      }
+    },
+    "consoleErrors": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "maxLength": 2000 }
+    },
+    "screenshot": {
+      "type": "string",
+      "maxLength": 5242880,
+      "pattern": "^data:image/png;base64,"
+    },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forgeops.local/schemas/context-pack.schema.json",
+  "title": "Engineering Context Pack",
+  "description": "Normalized context packet consumed by Triage/Coding Agents (v1.0). Built by ForgeOps Gateway from SDK submission + Project Registry + observability lookups.",
+  "type": "object",
+  "required": ["schemaVersion", "feedback", "project", "page", "git"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "feedback": {
+      "type": "object",
+      "required": ["id", "type", "description", "reporter"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "enum": ["BUG", "OPTIMIZATION", "REQUIREMENT"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "expectedBehavior": { "type": "string" },
+        "steps": { "type": "string" },
+        "note": { "type": "string" },
+        "reporter": { "type": "string" }
+      }
+    },
+    "project": {
+      "type": "object",
+      "required": ["id", "environment"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "environment": { "enum": ["test", "uat", "staging"] }
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string" },
+        "route": { "type": "string" },
+        "title": { "type": "string" }
+      }
+    },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "userAgent": { "type": "string" },
+        "platform": { "type": "string" },
+        "screen": { "type": "string" }
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string" },
+        "commit": { "type": "string" }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string" },
+        "commit": { "type": "string" }
+      }
+    },
+    "requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "method": { "type": "string" },
+          "url": { "type": "string" },
+          "status": { "type": "integer" },
+          "durationMs": { "type": "integer" },
+          "requestId": { "type": "string" },
+          "traceId": { "type": "string" },
+          "time": { "type": "string" }
+        }
+      }
+    },
+    "logs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": { "type": "string" },
+          "requestId": { "type": "string" },
+          "entries": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "consoleErrors": { "type": "array", "items": { "type": "string" } },
+    "git": {
+      "type": "object",
+      "required": ["repoProvider"],
+      "additionalProperties": false,
+      "properties": {
+        "repoProvider": { "enum": ["github", "gitlab", "gitea", "other"] },
+        "frontendRepo": { "type": "string" },
+        "frontendPath": { "type": "string" },
+        "backendRepo": { "type": "string" },
+        "backendPath": { "type": "string" },
+        "defaultBranch": { "type": "string" }
+      }
+    },
+    "recentDeployments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "environment": { "type": "string" },
+          "version": { "type": "string" },
+          "commitSha": { "type": "string" },
+          "time": { "type": "string" }
+        }
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "feedbackId": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "string" },
+          "time": { "type": "string" }
+        }
+      }
+    },
+    "acceptanceCriteria": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "enum": ["screenshot"] },
+          "storedPath": { "type": "string" }
+        }
+      }
+    }
+  }
+}

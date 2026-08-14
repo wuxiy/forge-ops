@@ -1,0 +1,3 @@
+packages:
+  - sdk/forgeops-feedback-vue
+  - examples/demo-app/web

@@ -1,0 +1,21 @@
+# Node
+node_modules/
+dist/
+*.local
+
+# Java
+target/
+*.class
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Runtime data
+data/
+deploy/docker-compose/forgeops.env
+deploy/docker-compose/data/
+
+# OS
+.DS_Store

@@ -1,0 +1,27 @@
+# Agent 自动化与安全策略（全局默认，可被 project policy 覆盖，但只允许收紧不允许放宽）
+version: 1
+
+automation:
+  autoAnalyze: true      # 反馈到达后自动指派 Triage Agent
+  autoCode: true         # Triage 判定可修后自动指派 Coding Agent
+  autoPR: true           # Coding Agent 可创建 Draft PR
+  autoMerge: false       # 任何情况下禁止 Agent Merge（硬编码强制，见 HumanGate）
+  autoDeploy: false      # 任何情况下禁止 Agent 触发发布（硬编码强制）
+
+humanGate:
+  mergeRequiresHuman: true
+  releaseRequiresHuman: true
+
+git:
+  branchPrefix: "feature/agent/"
+  forbiddenPushBranches: [main, master, develop, release/*]
+  prMode: draft
+
+runtime:
+  requireDedicatedUser: true
+  forbiddenCredentials:
+    - production-database
+    - production-deploy
+  allowedCredentialScopes:
+    - current-project-repo-contents-write
+    - current-project-repo-pull-request-write
