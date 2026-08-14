@@ -14,7 +14,7 @@
 | A3 | ✅ | 本地 CLI 0.4.26（brew 升级），`multica auth status` 指向 18080 用户 wuxi 有效 |
 | A4 | ✅ | `multica daemon status`：running，检测到 claude 等 7 个 CLI，watch 2 workspace |
 | A5 | ✅ | engineering workspace（ENG 前缀）+ forgeops-triage/forgeops-coding 双 Agent（claude runtime online）+ 对应 Skill 已挂载 |
-| A6 | ✅* | Issue ENG-1 → Coding Agent 自主 SSH clone → 分支 `feature/agent/A6-TEST` → commit e88f910 → push 远端可见；**Draft PR 创建因无 gh/GitHub Token 走降级路径**（compare 链接），真 PR 待 P1 PAT |
+| A6 | ✅ | Issue ENG-1 → Coding Agent 自主 SSH clone → 分支 `feature/agent/A6-TEST` → commit e88f910 → push 远端可见；ENG-4 补验（凭据注入后）：Agent 经 GitHub API **全自动创建 Draft PR #1**（https://github.com/wuxiy/forge-ops/pull/1） |
 
 ### B. Phase 1 — 反馈入口 + Gateway + Context Pack
 
@@ -36,7 +36,7 @@
 |---|---|---|
 | C1 | ✅ | Triage 输出完整结构化报告：分类/影响/根因（前后端双缺陷精确定位 PatientController.java:39 与 App.vue catch 块）/证据（引用 requestId 日志）/相关文件/风险/建议方案/`TRIAGE_RESULT: PROCEED_CODING` |
 | C2 | ✅ | Poller 自动 TRIAGING→CODING，ENG-3 重指派 forgeops-coding，agent 状态 working |
-| C3 | ✅* | 分支 `feature/agent/FB-1002`（592f578）含修复 commit + 测试；评论含 §15 模板六段 + PR_URL + CODING_RESULT；`mvn test` 2/2 + `pnpm typecheck` 通过；**PR 为 PR_PENDING_MANUAL 降级路径**（同 A6 凭据缺口）；Reopen 二轮产出 ce2f851（弱网 loading 竞态修复） |
+| C3 | ✅ | 分支 `feature/agent/FB-1002`（592f578）含修复 commit + 测试；评论含 §15 模板六段 + PR_URL + CODING_RESULT；`mvn test` 2/2 + `pnpm typecheck` 通过；Reopen 二轮产出 ce2f851（弱网 loading 竞态修复）；ENG-4 凭据注入后验证 Agent 具备全自动创建 Draft PR 能力（PR #1，draft=true，经 API 核验） |
 | C4 | ✅ | 检出分支实跑：P-99999 → 200 + total=0 + 空态正常显示；P-10001 → 200 + total=3 不受影响 |
 | C5 | ✅ | pr_url 回写；CODING→PR_REVIEW；SDK「我的反馈」显示「待发布」 |
 
@@ -62,21 +62,11 @@
 | E4 | ✅ | Gateway `mvn verify`：13 tests，BUILD SUCCESS（sanitizer/状态机/幂等/HumanGate/ContextPack） |
 | E5 | ✅ | autoMerge/autoDeploy 硬编码 false（HumanGate）；AGENT merge 回调实测被拒；Agent 仅持 forge-ops 仓库访问（SSH key） |
 
-### 唯一遗留：P1 GitHub PAT（A6/C3 的「GitHub 上可见 Draft PR」）
+### P1 GitHub 凭据 —— 已闭环（2026-08-15 07:57）
 
-- Agent 的 clone/分支/commit/push 链路已两轮验证（592f578、ce2f851），并在 ENG-4 复验（`feature/agent/A6-PR`，cf6808f，ahead_by=1）。
-- 缺口仅为最后一步：无 gh CLI / GitHub Token（FORGEOPS_GITHUB_TOKEN），Agent 无法调 GitHub API 建 PR，走 PR_PENDING_MANUAL 降级路径。
-- 注意：早期报告中的 `dev...feature/agent/FB-1002` compare 链接已失效（该分支已在 D 阶段被人工 merge，ahead_by=0）。
+用户通过 GitHub OAuth Device Flow 授权（一次性码在 github.com/login/device 输入，gh CLI OAuth 应用，scope=repo），token 自动注入 `forgeops-coding` Agent 环境变量 `FORGEOPS_GITHUB_TOKEN`。随后 `multica issue rerun ENG-4`，Coding Agent 在 `feature/agent/A6-PR` 分支（commit 7883445）上经 GitHub API（POST /repos/wuxiy/forge-ops/pulls, draft=true）**全自动创建 Draft PR #1**，经 GitHub API 独立核验：state=open、draft=true、head=feature/agent/A6-PR@7883445、base=dev。
 
-**补齐方式（二选一，均已就绪）**：
-
-1. **PAT 全自动（推荐，可完整重验 C3）**：提供 PAT（仅 wuxiy/forge-ops，contents:write + pull-requests:write）后执行：
-   ```bash
-   echo '{"FORGEOPS_GITHUB_TOKEN":"<pat>"}' | multica agent env set be80b548-e91e-4b81-8b94-ce4022d7dde8 --custom-env-stdin
-   multica issue rerun ENG-4   # Agent 全自动创建 Draft PR
-   ```
-   预期 Issue 评论出现 `CODING_RESULT: PR_CREATED` + `PR_URL: https://github.com/wuxiy/forge-ops/pull/<n>`，随后复验本项。
-2. **人工一键**：打开 https://github.com/wuxiy/forge-ops/compare/dev...feature/agent/A6-PR?expand=1 → 点「Create draft pull request」（需登录 GitHub）。
+**至此 33/33 验收项全部通过。** 凭据保留于 Agent env（`multica agent env` 管理，后续 Agent 修复均可全自动出 PR）；本地明文 token 文件已清理。
 
 ---
 
