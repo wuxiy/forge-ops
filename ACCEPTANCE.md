@@ -62,10 +62,21 @@
 | E4 | ✅ | Gateway `mvn verify`：13 tests，BUILD SUCCESS（sanitizer/状态机/幂等/HumanGate/ContextPack） |
 | E5 | ✅ | autoMerge/autoDeploy 硬编码 false（HumanGate）；AGENT merge 回调实测被拒；Agent 仅持 forge-ops 仓库访问（SSH key） |
 
-### 唯一遗留：P1 GitHub PAT
+### 唯一遗留：P1 GitHub PAT（A6/C3 的「GitHub 上可见 Draft PR」）
 
-- A6/C3 的「GitHub 上可见 Draft PR（gh 自动创建）」降级为 PR_PENDING_MANUAL（分支已推送 + compare 链接），因环境无 gh CLI / GitHub Token（浏览器亦无登录会话）。
-- **补齐方式**（二选一）：① 提供 PAT（仅 wuxiy/forge-ops、contents:write + pull-requests:write）→ `multica agent env set forgeops-coding FORGEOPS_GITHUB_TOKEN=xxx`，Agent 即可全自动创建 Draft PR；② 人工点击 compare 链接创建（流程其余环节不受影响）。
+- Agent 的 clone/分支/commit/push 链路已两轮验证（592f578、ce2f851），并在 ENG-4 复验（`feature/agent/A6-PR`，cf6808f，ahead_by=1）。
+- 缺口仅为最后一步：无 gh CLI / GitHub Token（FORGEOPS_GITHUB_TOKEN），Agent 无法调 GitHub API 建 PR，走 PR_PENDING_MANUAL 降级路径。
+- 注意：早期报告中的 `dev...feature/agent/FB-1002` compare 链接已失效（该分支已在 D 阶段被人工 merge，ahead_by=0）。
+
+**补齐方式（二选一，均已就绪）**：
+
+1. **PAT 全自动（推荐，可完整重验 C3）**：提供 PAT（仅 wuxiy/forge-ops，contents:write + pull-requests:write）后执行：
+   ```bash
+   echo '{"FORGEOPS_GITHUB_TOKEN":"<pat>"}' | multica agent env set be80b548-e91e-4b81-8b94-ce4022d7dde8 --custom-env-stdin
+   multica issue rerun ENG-4   # Agent 全自动创建 Draft PR
+   ```
+   预期 Issue 评论出现 `CODING_RESULT: PR_CREATED` + `PR_URL: https://github.com/wuxiy/forge-ops/pull/<n>`，随后复验本项。
+2. **人工一键**：打开 https://github.com/wuxiy/forge-ops/compare/dev...feature/agent/A6-PR?expand=1 → 点「Create draft pull request」（需登录 GitHub）。
 
 ---
 
