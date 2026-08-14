@@ -25,9 +25,8 @@ public class PatientController {
     }
 
     /**
-     * 检查记录查询。汇总逻辑取最后一条记录作为 latest ——
-     * 患者无记录时抛 IndexOutOfBoundsException → 500（预埋 Bug，B1 验收复现项）。
-     * 正确行为：空数据返回 total=0、latest=null，由前端展示空态。
+     * 检查记录查询。汇总逻辑取最后一条记录作为 latest；
+     * 患者无记录时返回 total=0、latest=null，由前端展示空态。
      */
     @GetMapping("/patients/{patientId}/records")
     public Map<String, Object> records(@PathVariable String patientId) {
@@ -36,7 +35,7 @@ public class PatientController {
 
         Map<String, Object> summary = new HashMap<>();
         summary.put("total", records.size());
-        summary.put("latest", records.get(records.size() - 1));
+        summary.put("latest", records.isEmpty() ? null : records.get(records.size() - 1));
 
         Map<String, Object> body = new HashMap<>();
         body.put("patientId", patientId);

@@ -40,6 +40,8 @@
     </table>
 
     <div v-else-if="loaded" class="empty">该患者暂无检查记录</div>
+
+    <div v-else-if="error" class="empty error">{{ error }}</div>
   </main>
 
   <ForgeOpsWidget />
@@ -60,6 +62,7 @@ const patientId = ref('P-10001')
 const records = ref<ExamRecord[]>([])
 const loading = ref(false)
 const loaded = ref(false)
+const error = ref('')
 
 function saveUser() {
   localStorage.setItem('demo-user', user.value)
@@ -68,15 +71,22 @@ function saveUser() {
 async function load() {
   if (!patientId.value) return
   loading.value = true
+  error.value = ''
   try {
     const res = await fetch(`/api/patients/${encodeURIComponent(patientId.value)}/records`)
+    if (!res.ok) {
+      throw new Error(`查询失败（${res.status}），请稍后重试`)
+    }
     const data = await res.json()
     records.value = data.records ?? []
     loaded.value = true
+  } catch (e) {
+    // 请求失败或响应非 JSON 时复位 loading 并展示错误提示，避免页面停留在「加载中…」。
+    records.value = []
+    loaded.value = false
+    error.value = e instanceof Error ? e.message : '查询失败，请稍后重试'
+  } finally {
     loading.value = false
-  } catch {
-    // 预埋前端缺陷：请求失败（如空数据患者触发 500）时缺少错误处理，loading 永不结束。
-    // 正确行为：停止 loading 并展示错误/空态提示。
   }
 }
 
@@ -164,5 +174,10 @@ onMounted(load)
   border-radius: 8px;
   padding: 24px;
   text-align: center;
+}
+.empty.error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
 }
 </style>
