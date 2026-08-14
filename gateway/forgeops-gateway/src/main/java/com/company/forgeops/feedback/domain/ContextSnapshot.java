@@ -27,7 +27,7 @@ public class ContextSnapshot {
     private String reason = "INITIAL";
 
     @Column(name = "context_json", nullable = false, columnDefinition = "JSONB")
-    private String contextJson;
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)    private String contextJson;
 
     @Column(name = "created_at", nullable = false, columnDefinition = "TIMESTAMPTZ")
     private OffsetDateTime createdAt = OffsetDateTime.now();

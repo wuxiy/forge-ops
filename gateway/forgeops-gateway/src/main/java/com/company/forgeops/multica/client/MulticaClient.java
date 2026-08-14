@@ -103,14 +103,16 @@ public class MulticaClient {
                 .retrieve()
                 .body(JsonNode.class);
         if (response == null || !response.isArray()) return List.of();
-        return List.of(response).stream()
-                .<Comment>mapMulti((node, consumer) -> consumer.accept(new Comment(
-                        node.path("id").asText(),
-                        node.path("author_type").asText(),
-                        node.path("author_id").asText(null),
-                        node.path("content").asText(),
-                        node.path("created_at").asText())))
-                .toList();
+        List<Comment> comments = new java.util.ArrayList<>();
+        for (JsonNode node : response) {
+            comments.add(new Comment(
+                    node.path("id").asText(),
+                    node.path("author_type").asText(),
+                    node.path("author_id").asText(null),
+                    node.path("content").asText(),
+                    node.path("created_at").asText()));
+        }
+        return comments;
     }
 
     /** 按名称解析 Agent ID（workspace 内）。 */

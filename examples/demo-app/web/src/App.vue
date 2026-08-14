@@ -70,13 +70,16 @@ async function load() {
   loading.value = true
   try {
     const res = await fetch(`/api/patients/${encodeURIComponent(patientId.value)}/records`)
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
+    }
     const data = await res.json()
     records.value = data.records ?? []
     loaded.value = true
     loading.value = false
   } catch {
-    // 预埋前端缺陷：请求失败（如空数据患者触发 500）时缺少错误处理，loading 永不结束。
-    // 正确行为：停止 loading 并展示错误/空态提示。
+    // 预埋前端缺陷：请求失败（如空数据患者触发 500）时缺少错误处理，
+    // loading 永不复位 → 页面持续转圈。正确行为：复位 loading 并展示错误/空态提示。
   }
 }
 

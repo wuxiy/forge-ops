@@ -73,6 +73,9 @@ public class MulticaPoller {
         List<MulticaClient.Comment> comments = multicaClient.listComments(feedback.getMulticaIssueId());
         Optional<MulticaClient.Comment> latestTriage = lastMarker(comments, MARKER_TRIAGE);
         Optional<MulticaClient.Comment> latestCoding = lastMarker(comments, MARKER_CODING);
+        log.info("轮询 {} status={} comments={} triageMarker={} codingMarker={}",
+                feedback.identifier(), feedback.getStatus(), comments.size(),
+                latestTriage.isPresent(), latestCoding.isPresent());
 
         if (feedback.getStatus() == FeedbackStatus.TRIAGING && latestTriage.isPresent()) {
             handleTriageResult(feedback, latestTriage.get());

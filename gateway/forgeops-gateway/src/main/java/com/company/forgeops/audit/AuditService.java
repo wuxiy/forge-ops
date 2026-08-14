@@ -22,7 +22,8 @@ public class AuditService {
             entry.setFeedbackId(feedbackId);
             entry.setActor(actor == null ? "system" : actor);
             entry.setAction(action);
-            entry.setDetail(detail);
+            entry.setDetail(com.company.forgeops.context.builder.ContextPackJson.toJson(
+                    java.util.Map.of("detail", detail == null ? "" : detail)));
             repository.save(entry);
             log.info("AUDIT feedback={} actor={} action={} detail={}", feedbackId, actor, action, detail);
         } catch (Exception e) {

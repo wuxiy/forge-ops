@@ -16,7 +16,7 @@ public record ProjectConfig(
         Observability observability,
         MulticaConfig multica,
         Map<String, Object> ci,
-        Map<String, Map<String, String>> environments,
+        Map<String, Object> environments,
         Map<String, Object> policy,
         Map<String, Object> security) {
 

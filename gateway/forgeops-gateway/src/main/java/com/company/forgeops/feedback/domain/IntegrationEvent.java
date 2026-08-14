@@ -30,7 +30,7 @@ public class IntegrationEvent {
     private String eventType;
 
     @Column(columnDefinition = "JSONB")
-    private String payload;
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)    private String payload;
 
     @Column(nullable = false, length = 16)
     private String status = "PROCESSED";

@@ -14,9 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.Constructor;
 
 /**
  * Project Registry（§10）：目录内 YAML = 项目接入唯一动作。
@@ -64,11 +62,62 @@ public class ProjectRegistryService {
         log.info("Project Registry 加载完成: {} -> {}", registryDir, cache.keySet());
     }
 
+    @SuppressWarnings("unchecked")
     private ProjectConfig parse(Path file) throws IOException {
-        Yaml yaml = new Yaml(new Constructor(ProjectConfig.class, new LoaderOptions()));
+        Yaml yaml = new Yaml();
+        Map<String, Object> root;
         try (var reader = Files.newBufferedReader(file)) {
-            return yaml.load(reader);
+            root = yaml.load(reader);
         }
+        if (root == null) {
+            throw new IllegalStateException("空配置文件: " + file);
+        }
+
+        Map<String, Object> frontend = asMap(root.get("frontend"));
+        Map<String, Object> backend = asMap(root.get("backend"));
+        Map<String, Object> observability = asMap(root.get("observability"));
+        Map<String, Object> logs = asMap(observability.get("logs"));
+        Map<String, Object> multica = asMap(root.get("multica"));
+
+        ProjectConfig.RepoConfig frontendConfig = frontend == null ? null : new ProjectConfig.RepoConfig(
+                str(frontend.get("framework")), str(frontend.get("repo")), str(frontend.get("repoProvider")),
+                str(frontend.get("path")), str(frontend.get("defaultBranch")));
+        ProjectConfig.RepoConfig backendConfig = backend == null ? null : new ProjectConfig.RepoConfig(
+                str(backend.get("framework")), str(backend.get("repo")), str(backend.get("repoProvider")),
+                str(backend.get("path")), str(backend.get("defaultBranch")));
+        ProjectConfig.Observability obs = observability.isEmpty() ? null : new ProjectConfig.Observability(
+                new ProjectConfig.Observability.Logs(
+                        str(logs.get("type")), str(logs.get("service")), str(logs.get("baseUrl"))));
+        ProjectConfig.MulticaConfig multicaConfig = multica.isEmpty() ? null : new ProjectConfig.MulticaConfig(
+                str(multica.get("workspace")), str(multica.get("project")),
+                str(multica.get("triageAgent")), str(multica.get("codingAgent")));
+
+        return new ProjectConfig(
+                str(root.get("id")),
+                str(root.get("name")),
+                asMap(root.get("feedback")),
+                frontendConfig,
+                backendConfig,
+                asMap(root.get("runtime")),
+                obs,
+                multicaConfig,
+                asMap(root.get("ci")),
+                asMap(root.get("environments")),
+                asMap(root.get("policy")),
+                asMap(root.get("security")));
+    }
+
+    private static Map<String, Object> asMap(Object value) {
+        if (value instanceof Map<?, ?> m) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            m.forEach((k, v) -> result.put(String.valueOf(k), v));
+            return result;
+        }
+        return new LinkedHashMap<>();
+    }
+
+    private static String str(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     public Optional<ProjectConfig> find(String projectId) {

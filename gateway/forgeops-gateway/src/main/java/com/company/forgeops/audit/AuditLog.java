@@ -27,7 +27,7 @@ public class AuditLog {
     private String action;
 
     @Column(columnDefinition = "JSONB")
-    private String detail;
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)    private String detail;
 
     @Column(name = "created_at", nullable = false, columnDefinition = "TIMESTAMPTZ")
     private OffsetDateTime createdAt = OffsetDateTime.now();

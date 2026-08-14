@@ -30,7 +30,7 @@ public class FeedbackComment {
     private String content;
 
     @Column(columnDefinition = "JSONB")
-    private String attachments;
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)    private String attachments;
 
     @Column(name = "created_at", nullable = false, columnDefinition = "TIMESTAMPTZ")
     private OffsetDateTime createdAt = OffsetDateTime.now();
