@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ForgeOps — AI 原生工程智能协作平台</title>
+<meta name="description" content="ForgeOps 打通反馈→AI 分析/修复→PR→人工 Review→构建发布→原反馈人验证的完整工程闭环。">
+<style>
+:root {
+  --bg: #0c0e12;
+  --bg2: #12151c;
+  --bg3: #181c26;
+  --line: #262c3a;
+  --fg: #e8eaf0;
+  --fg2: #9aa3b5;
+  --fg3: #5d6578;
+  --amber: #f59e0b;
+  --amber2: #fbbf24;
+  --amber-dim: rgba(245, 158, 11, 0.12);
+  --green: #34d399;
+  --blue: #60a5fa;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+a { color: var(--amber2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--mono); font-size: 0.88em; }
+
+/* ---------- nav ---------- */
+nav {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(12, 14, 18, 0.82); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; color: var(--fg); }
+.brand:hover { text-decoration: none; }
+.brand .mark {
+  width: 26px; height: 26px; border-radius: 6px;
+  background: linear-gradient(135deg, #f59e0b, #dc2626);
+  display: grid; place-items: center; color: #fff; font-size: 14px; font-weight: 800;
+}
+nav .links { display: flex; gap: 26px; font-size: 14px; }
+nav .links a { color: var(--fg2); }
+nav .links a:hover { color: var(--fg); text-decoration: none; }
+
+/* ---------- hero ---------- */
+header { padding: 88px 0 72px; position: relative; overflow: hidden; }
+header::before {
+  content: ""; position: absolute; inset: 0;
+  background:
+    radial-gradient(700px 340px at 78% -10%, rgba(245, 158, 11, 0.13), transparent 65%),
+    radial-gradient(500px 300px at 8% 110%, rgba(96, 165, 250, 0.07), transparent 60%);
+  pointer-events: none;
+}
+.tag {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 12px; color: var(--amber2);
+  border: 1px solid rgba(245, 158, 11, 0.35); background: var(--amber-dim);
+  padding: 5px 14px; border-radius: 999px; margin-bottom: 26px;
+}
+.tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+h1 { font-size: clamp(38px, 6vw, 60px); line-height: 1.15; letter-spacing: -0.02em; font-weight: 800; }
+h1 .hl { color: var(--amber); }
+.sub { margin-top: 22px; font-size: 18px; color: var(--fg2); max-width: 720px; }
+.cta { margin-top: 36px; display: flex; gap: 14px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 24px; border-radius: 10px; font-size: 15px; font-weight: 600;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.btn:hover { text-decoration: none; transform: translateY(-1px); }
+.btn-1 { background: var(--amber); color: #1a1205; box-shadow: 0 6px 24px rgba(245,158,11,.25); }
+.btn-1:hover { background: var(--amber2); }
+.btn-2 { border: 1px solid var(--line); color: var(--fg); background: var(--bg2); }
+.btn-2:hover { border-color: #3a4356; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-top: 58px; }
+.stat { background: var(--bg2); padding: 22px 24px; }
+.stat .n { font-family: var(--mono); font-size: 30px; font-weight: 700; color: var(--amber); }
+.stat .l { font-size: 13px; color: var(--fg2); margin-top: 4px; }
+
+/* ---------- section ---------- */
+section { padding: 76px 0; }
+section.alt { background: var(--bg2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.kicker { font-family: var(--mono); font-size: 13px; color: var(--amber); letter-spacing: 0.14em; text-transform: uppercase; }
+h2 { font-size: 30px; font-weight: 750; margin: 10px 0 14px; letter-spacing: -0.01em; }
+.lead { color: var(--fg2); max-width: 760px; }
+
+/* ---------- pipeline ---------- */
+.pipe { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 38px; }
+.step {
+  position: relative; background: var(--bg3); border: 1px solid var(--line);
+  border-radius: 12px; padding: 18px 18px 16px;
+}
+.step .no { font-family: var(--mono); font-size: 11px; color: var(--fg2); }
+.step .t { font-weight: 700; font-size: 15px; margin-top: 6px; }
+.step .d { font-size: 13px; color: var(--fg2); margin-top: 6px; line-height: 1.55; }
+.step.agent { border-color: rgba(245,158,11,.4); background: linear-gradient(180deg, rgba(245,158,11,.08), var(--bg3)); }
+.step.agent .t { color: var(--amber2); }
+.gate {
+  margin-top: 12px; display: flex; align-items: center; gap: 10px;
+  border: 1px dashed rgba(245,158,11,.45); border-radius: 10px; padding: 12px 16px;
+  font-size: 13.5px; color: var(--fg2); background: var(--amber-dim);
+}
+.gate b { color: var(--amber2); font-weight: 650; }
+
+/* ---------- problems ---------- */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 34px; }
+.card { background: var(--bg3); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+.card .h { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15.5px; }
+.card .h .ico { font-size: 17px; }
+.card p { font-size: 13.8px; color: var(--fg2); margin-top: 8px; }
+.card .fix { margin-top: 12px; font-size: 13px; color: var(--green); font-family: var(--mono); }
+
+/* ---------- table ---------- */
+.tbl { width: 100%; border-collapse: collapse; margin-top: 30px; font-size: 14px; }
+.tbl th { text-align: left; padding: 12px 14px; color: var(--fg2); font-weight: 600; font-size: 13px; border-bottom: 1px solid var(--line); }
+.tbl td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl .mono { font-family: var(--mono); font-size: 13px; color: var(--fg2); }
+.pill { display: inline-block; font-size: 12px; padding: 2px 10px; border-radius: 999px; font-family: var(--mono); }
+.pill.self { background: rgba(245,158,11,.14); color: var(--amber2); }
+.pill.reuse { background: rgba(96,165,250,.12); color: var(--blue); }
+.pill.later { background: rgba(154,163,181,.12); color: var(--fg2); }
+
+/* ---------- timeline ---------- */
+.tl { margin-top: 34px; border-left: 2px solid var(--line); padding-left: 26px; display: grid; gap: 20px; }
+.ev { position: relative; }
+.ev::before { content: ""; position: absolute; left: -33px; top: 7px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg); border: 2px solid var(--fg2); }
+.ev.hot::before { border-color: var(--amber); background: var(--amber); box-shadow: 0 0 10px rgba(245,158,11,.5); }
+.ev .tm { font-family: var(--mono); font-size: 12px; color: var(--fg2); }
+.ev .tx { font-size: 14.5px; margin-top: 2px; }
+.ev .tx b { color: var(--amber2); font-weight: 650; }
+.ev .note { font-size: 13px; color: var(--fg2); font-family: var(--mono); margin-top: 3px; }
+
+/* ---------- quickstart ---------- */
+.term {
+  margin-top: 30px; background: #0a0c10; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+}
+.term .bar { display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-bottom: 1px solid var(--line); background: var(--bg2); }
+.term .bar i { width: 11px; height: 11px; border-radius: 50%; background: #2c3242; }
+.term .bar i:first-child { background: #ff5f57; } .term .bar i:nth-child(2) { background: #febc2e; } .term .bar i:nth-child(3) { background: #28c840; }
+.term .bar span { margin-left: 8px; font-family: var(--mono); font-size: 12px; color: var(--fg2); }
+.term pre { padding: 20px 22px; overflow-x: auto; font-family: var(--mono); font-size: 13.5px; line-height: 1.8; }
+.term .c { color: #58607a; }
+.term .p { color: var(--green); }
+.term .k { color: var(--amber2); }
+
+footer { border-top: 1px solid var(--line); padding: 42px 0 60px; color: var(--fg2); font-size: 14px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+@media (max-width: 880px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .pipe { grid-template-columns: 1fr 1fr; }
+  .grid2 { grid-template-columns: 1fr; }
+  nav .links { display: none; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#"><span class="mark">F</span>ForgeOps</a>
+    <div class="links">
+      <a href="#loop">核心闭环</a>
+      <a href="#why">解决什么</a>
+      <a href="#stack">架构选型</a>
+      <a href="#proof">实测证据</a>
+      <a href="#start">快速开始</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap">
+    <div class="tag"><span class="dot"></span>V0.1 已上线试运行 · 33/33 验收通过</div>
+    <h1>反馈即闭环的<br><span class="hl">AI 原生工程协作平台</span></h1>
+    <p class="sub">ForgeOps 把测试 / 产品的一句话反馈，自动变成带完整工程上下文的 Issue、根因分析、可 Review 的 Draft PR，发布后自动回到原反馈人完成验证 —— 开发者只需要做一件事：Review。</p>
+    <div class="cta">
+      <a class="btn btn-1" href="https://github.com/wuxiy/forge-ops" target="_blank" rel="noreferrer">⌗ 查看仓库</a>
+      <a class="btn btn-2" href="#start">快速开始</a>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n">33/33</div><div class="l">验收项全部实跑通过</div></div>
+      <div class="stat"><div class="n">2 轮</div><div class="l">端到端闭环（含 Reopen 复验）</div></div>
+      <div class="stat"><div class="n">100%</div><div class="l">Agent 修复经人工 Review 合并</div></div>
+      <div class="stat"><div class="n">1 份 YAML</div><div class="l">新项目接入成本</div></div>
+    </div>
+  </div>
+</header>
+
+<section id="loop">
+  <div class="wrap">
+    <div class="kicker">Engineering Loop</div>
+    <h2>一条可追踪的完整闭环</h2>
+    <p class="lead">不追求"无人值守自动修复"。AI 负责重活（重现、找日志、定位、改码），人类保留关键节点（Review、合并、发布）。</p>
+    <div class="pipe">
+      <div class="step"><div class="no">01 · HUMAN</div><div class="t">业务页面提交反馈</div><div class="d">Vue SDK 白名单采集：失败请求、Request ID、前后端版本 / Commit、Console 错误，一键提交。</div></div>
+      <div class="step"><div class="no">02 · FORGEOPS</div><div class="t">Context Pack 自动构建</div><div class="d">Gateway 按 requestId 拉取日志摘录、关联 Repo 与版本，PII 双重脱敏后生成标准化上下文。</div></div>
+      <div class="step agent"><div class="no">03 · AGENT</div><div class="t">Triage 根因分析</div><div class="d">Triage Agent 只读分析：定位到文件与行号、引用日志证据，判定是否进入自动修复。</div></div>
+      <div class="step agent"><div class="no">04 · AGENT</div><div class="t">Coding 修复 + Draft PR</div><div class="d">Coding Agent 切 <code>feature/agent/FB-xxxx</code> 分支，修复 + 测试全绿后全自动创建 Draft PR。</div></div>
+      <div class="step"><div class="no">05 · HUMAN</div><div class="t">人工 Review 合并</div><div class="d">开发者 Review 六段式 PR 报告（问题/根因/修改/测试/风险/来源），一键合并。</div></div>
+      <div class="step"><div class="no">06 · CI/CD</div><div class="t">复用现有流水线</div><div class="d">Git / CI / 部署三回调驱动状态机：BUILDING → DEPLOYING，幂等且可审计。</div></div>
+      <div class="step"><div class="t" style="margin-top:2px">07 · 通知</div><div class="d">部署完成自动通知原反馈人「待验证」，附带版本号 —— 不再需要人工找人。</div></div>
+      <div class="step"><div class="no">08 · HUMAN</div><div class="t">原反馈人验证</div><div class="d">SDK 内一键「验证通过 / 仍有问题」；Reopen 复用原 Issue 并追加上下文，禁止孤立新 Bug。</div></div>
+    </div>
+    <div class="gate">⛨ <span><b>Human Gate：</b>Agent 自动化终点是 Draft PR。Merge 与发布永远人工 —— 平台侧硬编码，Agent 冒充 merge 的回调会被直接拒绝（已实测）。</span></div>
+  </div>
+</section>
+
+<section class="alt" id="why">
+  <div class="wrap">
+    <div class="kicker">Why ForgeOps</div>
+    <h2>开发者的时间去哪了？</h2>
+    <p class="lead">测试环境的问题处理，大量时间耗在"不是写代码"的环节。ForgeOps 逐项拆掉：</p>
+    <div class="grid2">
+      <div class="card"><div class="h"><span class="ico">🔁</span>上下文重复整理</div><p>问题描述、版本、页面、日志、代码信息需要开发二次收集。</p><div class="fix">→ Context Pack 自动构建，requestId 直查日志</div></div>
+      <div class="card"><div class="h"><span class="ico">📉</span>信息传递损耗</div><p>线上文档、群聊、口头沟通之间细节丢失。</p><div class="fix">→ 反馈即结构化数据，全链路一个 ID 追踪</div></div>
+      <div class="card"><div class="h"><span class="ico">🧲</span>开发被动中转</div><p>重现、查日志、整理 Prompt 给 AI，占据主要工时。</p><div class="fix">→ Triage / Coding Agent 直接消费标准化上下文</div></div>
+      <div class="card"><div class="h"><span class="ico">🔓</span>闭环不完整</div><p>发布后仍需人工找原反馈人，Issue 状态难追踪。</p><div class="fix">→ 部署回调自动通知，验证结果回写同一时间线</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="wrap">
+    <div class="kicker">Architecture</div>
+    <h2>只造必须造的，其余复用</h2>
+    <p class="lead">公司长期资产是 Registry、Policy、Context Pack 与反馈闭环；Agent 编排交给 Multica，执行交给 Claude Code，Git 与 CI/CD 原样复用。</p>
+    <table class="tbl">
+      <tr><th>能力</th><th>选型</th><th>定位</th></tr>
+      <tr><td>反馈采集</td><td><span class="pill self">自研</span> ForgeOps Feedback SDK（Vue 3）</td><td class="mono">白名单采集 · 我的反馈 · 验证入口</td></tr>
+      <tr><td>工程接入层</td><td><span class="pill self">自研</span> ForgeOps Gateway（Spring Boot 4）</td><td class="mono">Intake · Context Pack · 状态机 · 回调 · 审计</td></tr>
+      <tr><td>项目接入</td><td><span class="pill self">自研</span> Project Registry</td><td class="mono">新项目 = 一份 YAML，平台零改动</td></tr>
+      <tr><td>Agent 编排</td><td><span class="pill reuse">复用</span> Multica（self-host v0.4.26）</td><td class="mono">Issue · Agent · Skill · Runtime · 看板</td></tr>
+      <tr><td>Coding Agent</td><td><span class="pill reuse">复用</span> Claude Code</td><td class="mono">本地 daemon 执行，SSH scoped 凭据</td></tr>
+      <tr><td>Git / CI/CD</td><td><span class="pill reuse">复用</span> 现有平台</td><td class="mono">三回调契约接入，不重建发布系统</td></tr>
+      <tr><td>异常治理 / SRE RCA</td><td><span class="pill later">V0.2+</span> Keep / HolmesGPT</td><td class="mono">自动错误发现与根因调查，延后引入</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="alt" id="proof">
+  <div class="wrap">
+    <div class="kicker">Verified Live</div>
+    <h2>不是 PPT，是实跑记录</h2>
+    <p class="lead">V0.1 验收全部在真实环境完成：真浏览器提交反馈 → 真 Agent 分析修复 → 真 Draft PR（<a href="https://github.com/wuxiy/forge-ops/pull/1" target="_blank" rel="noreferrer">#1</a>）→ 真人合并 → 模拟 CI 回调 → 真人验证。以下是一条真实反馈（FB-1002）的完整时间线：</p>
+    <div class="tl">
+      <div class="ev"><div class="tm">18:41</div><div class="tx">测试同学在业务页面提交 <b>FB-1002</b>「检查记录页面持续 loading」</div><div class="note">SDK 自动附带 2 条失败请求（含 requestId）· 手机号被脱敏为 ***MASKED***</div></div>
+      <div class="ev"><div class="tm">18:43</div><div class="tx"><b>Triage Agent</b> 输出结构化根因</div><div class="note">后端 PatientController.java:39 越界 + 前端 catch 缺失 · 引用日志 ArrayIndexOutOfBoundsException 证据</div></div>
+      <div class="ev hot"><div class="tm">18:52</div><div class="tx"><b>Coding Agent</b> 推送修复分支，测试 2/2 通过</div><div class="note">feature/agent/FB-1002 · mvn test + pnpm typecheck 全绿</div></div>
+      <div class="ev"><div class="tm">18:57</div><div class="tx">人工合并 → CI 三回调 → 部署 v0.1.1 → 反馈人点「<b>仍有问题</b>」</div><div class="note">原 Issue Reopen（不新建）· Context 追加快照 · Agent 二轮修复弱网竞态</div></div>
+      <div class="ev hot"><div class="tm">19:01</div><div class="tx">二轮部署 v0.1.2 → 反馈人「<b>验证通过</b>」→ DONE</div><div class="note">Multica Issue 同步 done · 全链路 27 条审计留痕</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <div class="kicker">Quick Start</div>
+    <h2>三步跑起来</h2>
+    <div class="term">
+      <div class="bar"><i></i><i></i><i></i><span>bash</span></div>
+      <pre><span class="c"># 1. 本地运行（demo 前后端 + Gateway）</span>
+<span class="p">$</span> pnpm install
+<span class="p">$</span> cd examples/demo-app/api  <span class="k">&&</span> mvn spring-boot:run      <span class="c"># :8081</span>
+<span class="p">$</span> cd examples/demo-app/web <span class="k">&&</span> pnpm dev                 <span class="c"># :5173（含反馈入口）</span>
+<span class="p">$</span> cd gateway/forgeops-gateway <span class="k">&&</span> mvn spring-boot:run        <span class="c"># :8080</span>
+
+<span class="c"># 2. 真实 Vue 项目接入 SDK（≤5 步）</span>
+<span class="p">$</span> pnpm add @forgeops/feedback-vue
+<span class="c">//</span> main.ts: createForgeOps({ gatewayUrl, projectId, environment: <span class="k">'test'</span> })
+
+<span class="c"># 3. 新项目接入平台 = 一份 YAML</span>
+<span class="p">$</span> cp registry/projects/demo-app.yaml registry/projects/<span class="k">your-app</span>.yaml
+<span class="p">$</span> curl -X POST gateway:8080/api/v1/projects/reload</pre>
+    </div>
+    <p style="margin-top:22px;color:var(--fg2);font-size:14px">完整接入指南（Request-ID 链路 / CI 回调契约）见仓库 <a href="https://github.com/wuxiy/forge-ops/blob/dev/docs/integration-guide.md" target="_blank" rel="noreferrer">docs/integration-guide.md</a>，架构决策见 <a href="https://github.com/wuxiy/forge-ops/blob/dev/forgeops-architecture-v0.1.md" target="_blank" rel="noreferrer">architecture-v0.1.md</a>。</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>ForgeOps — AI Native Engineering Operations Platform · V0.1</div>
+    <div><a href="https://github.com/wuxiy/forge-ops" target="_blank" rel="noreferrer">GitHub</a> · AGPL-3.0 · Multica / Claude Code 均为独立开源项目</div>
+  </div>
+</footer>
+
+</body>
+</html>
