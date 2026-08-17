@@ -239,7 +239,7 @@ footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wr
     <p class="lead">公司长期资产是 Registry、Policy、Context Pack 与反馈闭环；Agent 编排交给 Multica，执行交给 Claude Code，Git 与 CI/CD 原样复用。</p>
     <table class="tbl">
       <tr><th>能力</th><th>选型</th><th>定位</th></tr>
-      <tr><td>反馈采集</td><td><span class="pill self">自研</span> ForgeOps Feedback SDK（Vue 3）</td><td class="mono">白名单采集 · 我的反馈 · 验证入口</td></tr>
+      <tr><td>反馈采集</td><td><span class="pill self">自研</span> Feedback SDK（Vue2 / Vue3 / React）</td><td class="mono">加依赖+几行配置 · 白名单采集 · 我的反馈 · 验证入口</td></tr>
       <tr><td>工程接入层</td><td><span class="pill self">自研</span> ForgeOps Gateway（Spring Boot 4）</td><td class="mono">Intake · Context Pack · 状态机 · 回调 · 审计</td></tr>
       <tr><td>项目接入</td><td><span class="pill self">自研</span> Project Registry</td><td class="mono">新项目 = 一份 YAML，平台零改动</td></tr>
       <tr><td>Agent 编排</td><td><span class="pill reuse">复用</span> Multica（self-host v0.4.26）</td><td class="mono">Issue · Agent · Skill · Runtime · 看板</td></tr>
@@ -270,18 +270,22 @@ footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wr
     <div class="kicker">Quick Start</div>
     <h2>三步跑起来</h2>
     <div class="term">
-      <div class="bar"><i></i><i></i><i></i><span>bash</span></div>
-      <pre><span class="c"># 1. 本地运行（demo 前后端 + Gateway）</span>
-<span class="p">$</span> pnpm install
-<span class="p">$</span> cd examples/demo-app/api  <span class="k">&&</span> mvn spring-boot:run      <span class="c"># :8081</span>
-<span class="p">$</span> cd examples/demo-app/web <span class="k">&&</span> pnpm dev                 <span class="c"># :5173（含反馈入口）</span>
-<span class="p">$</span> cd gateway/forgeops-gateway <span class="k">&&</span> mvn spring-boot:run        <span class="c"># :8080</span>
+      <div class="bar"><i></i><i></i><i></i><span>接入 = 加依赖 + 几行配置（既有/新增项目相同）</span></div>
+      <pre><span class="c"># ── 前端（Vue2 / Vue3 / React 三选一，入口自动挂载）──────────────</span>
 
-<span class="c"># 2. 真实 Vue 项目接入 SDK（≤5 步）</span>
-<span class="p">$</span> pnpm add @forgeops/feedback-vue
-<span class="c">//</span> main.ts: createForgeOps({ gatewayUrl, projectId, environment: <span class="k">'test'</span> })
+<span class="c"># Vue 3</span>                                        <span class="c"># Vue 2</span>
+<span class="p">$</span> pnpm add @forgeops/feedback-vue                <span class="p">$</span> pnpm add @forgeops/feedback-vue2
+app.use(createForgeOps({...}).plugin)              Vue.use(createForgeOps({...}))
 
-<span class="c"># 3. 新项目接入平台 = 一份 YAML</span>
+<span class="c"># React（main.tsx 一行）</span>
+<span class="p">$</span> pnpm add @forgeops/feedback-react
+initForgeOpsFeedback({ gatewayUrl, projectId, environment: <span class="k">'test'</span> })
+
+<span class="c"># ── 后端（Spring Boot 3/4，一行依赖）────────────────────────</span>
+<span class="p">$</span> &lt;dependency&gt; com.forgeops:forgeops-spring-boot-starter &lt;/dependency&gt;
+<span class="c">#</span> 自动获得：X-Request-ID 链路 · 结构化日志 · /api/version · 日志按 requestId 查询
+
+<span class="c"># ── 新项目接入平台 = 一份 YAML ────────────────────────────────</span>
 <span class="p">$</span> cp registry/projects/demo-app.yaml registry/projects/<span class="k">your-app</span>.yaml
 <span class="p">$</span> curl -X POST gateway:8080/api/v1/projects/reload</pre>
     </div>
