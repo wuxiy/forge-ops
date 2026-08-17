@@ -1,4 +1,4 @@
-package com.forgeops.demoapi.web;
+package com.forgeops.spring.boot.tracing;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -11,18 +11,14 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.core.annotation.Order;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * ForgeOps Request-ID 链路（架构文档 §8）：
- * 浏览器/SDK 注入 X-Request-ID（ULID），本 Filter 透传或补生成，
- * 写入 MDC 并输出结构化 JSON 访问日志，同时存入内存 RequestLogStore
- * 供 ForgeOps Gateway 按 requestId 拉取日志摘录。
+ * 浏览器/SDK 注入 X-Request-ID（ULID），透传或补生成 -> MDC -> 结构化 JSON 访问日志
+ * （requestId/traceId/service/uri/httpMethod/status/durationMs/version/commitSha/exception）
+ * -> RequestLogStore 供 Context Pack 按 requestId 拉取。
  */
-@Component
-@Order(1)
 public class RequestIdFilter extends OncePerRequestFilter {
 
     public static final String HEADER_REQUEST_ID = "X-Request-ID";
@@ -31,11 +27,11 @@ public class RequestIdFilter extends OncePerRequestFilter {
     private static final Logger accessLog = LoggerFactory.getLogger("ACCESS");
 
     private final RequestLogStore requestLogStore;
-    private final VersionProvider versionProvider;
+    private final AppVersionInfo versionInfo;
 
-    public RequestIdFilter(RequestLogStore requestLogStore, VersionProvider versionProvider) {
+    public RequestIdFilter(RequestLogStore requestLogStore, AppVersionInfo versionInfo) {
         this.requestLogStore = requestLogStore;
-        this.versionProvider = versionProvider;
+        this.versionInfo = versionInfo;
     }
 
     @Override
@@ -66,22 +62,24 @@ public class RequestIdFilter extends OncePerRequestFilter {
         } finally {
             long duration = System.currentTimeMillis() - start;
             int status = response.getStatus();
-            String exception = failure == null ? null : failure.getClass().getSimpleName() + ": " + failure.getMessage();
+            String exception = failure == null ? ""
+                    : failure.getClass().getSimpleName() + ": " + failure.getMessage();
 
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("ts", Instant.now().toString());
             entry.put("requestId", requestId);
             entry.put("traceId", traceId == null ? "" : traceId);
-            entry.put("service", "demo-api");
+            entry.put("service", versionInfo.serviceName());
             entry.put("uri", uri);
             entry.put("httpMethod", method);
             entry.put("status", status);
             entry.put("durationMs", duration);
-            entry.put("version", versionProvider.version());
-            entry.put("commitSha", versionProvider.commit());
-            entry.put("exception", exception == null ? "" : exception);
+            entry.put("version", versionInfo.version());
+            entry.put("commitSha", versionInfo.commit());
+            entry.put("exception", exception);
 
-            accessLog.info("{}", Json.write(entry));
+            String line = JsonLine.write(entry);
+            accessLog.info("{}", line);
             requestLogStore.append(requestId, entry);
             MDC.clear();
         }

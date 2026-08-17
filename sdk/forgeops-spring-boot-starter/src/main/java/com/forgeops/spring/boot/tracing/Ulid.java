@@ -1,8 +1,8 @@
-package com.forgeops.demoapi.web;
+package com.forgeops.spring.boot.tracing;
 
 import java.security.SecureRandom;
 
-/** Minimal ULID generator (Crockford base32, 26 chars, sortable). */
+/** Minimal ULID generator (Crockford base32, 26 chars, sortable) - 与前端 SDK 格式一致。 */
 public final class Ulid {
 
     private static final char[] ENCODING = "0123456789ABCDEFGHJKMNPQRSTVWXYZ".toCharArray();

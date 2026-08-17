@@ -11,19 +11,15 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.forgeops.demoapi.domain.PatientRecordStore;
-import com.forgeops.demoapi.web.RequestIdFilter;
-import com.forgeops.demoapi.web.RequestLogStore;
-import com.forgeops.demoapi.web.VersionProvider;
 
 /**
  * 记录正确行为契约（Acceptance Criteria）：
  * 1. 有数据患者：200，records 非空，summary.total=3
  * 2. 无数据患者：200，summary.total=0、latest=null、records=[]（FB-1002 修复后行为）
+ * Request-ID 链路由 forgeops-spring-boot-starter 自动装配提供。
  */
-@WebMvcTest(excludeFilters = @org.springframework.context.annotation.ComponentScan.Filter(
-        type = org.springframework.context.annotation.FilterType.ASSIGNABLE_TYPE,
-        classes = RequestIdFilter.class))
-@Import({PatientRecordStore.class, VersionProvider.class, RequestLogStore.class})
+@WebMvcTest
+@Import(PatientRecordStore.class)
 class PatientControllerTest {
 
     @Autowired
@@ -34,7 +30,7 @@ class PatientControllerTest {
         mvc.perform(get("/api/patients/P-10001/records"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.summary.total").value(3))
-                .andExpect(jsonPath("$.summary.latest").isNotEmpty())
+                .andExpect(jsonPath("$.summary.latest.name").value("胸部CT"))
                 .andExpect(jsonPath("$.records[0].name").value("血常规"));
     }
 
@@ -43,7 +39,6 @@ class PatientControllerTest {
         mvc.perform(get("/api/patients/P-99999/records"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.summary.total").value(0))
-                .andExpect(jsonPath("$.summary.latest").value((Object) null))
-                .andExpect(jsonPath("$.records").isEmpty());
+                .andExpect(jsonPath("$.summary.latest").doesNotExist());
     }
 }

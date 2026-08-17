@@ -34,16 +34,40 @@
 
 ---
 
-## 二、Spring Boot 接入 Request-ID 链路
+## 二、Spring Boot 接入 Request-ID 链路（Starter 方式）
 
-> 参考实现：`examples/demo-app/api`（`RequestIdFilter.java`）
+> 参考实现：`examples/demo-app/api`（本身即依赖本 Starter 运行）
 
-1. 复制 `RequestIdFilter`（或引 demo-api 模块）：读取/生成 `X-Request-ID`（ULID）→ MDC → 输出结构化 JSON 访问日志（requestId/traceId/userId/service/uri/httpMethod/status/durationMs/version/commitSha）。
-2. 日志平台按 `requestId` 建索引（ES 场景在 Project Registry `observability.logs.type: elasticsearch` 配置查询）。
-3. 暴露 `GET /api/version` 返回 `{service, version, commit}`（Maven build-info 自动生成）。
-4. 反馈到达后：`requestId → 直接查到对应日志`（Context Pack 的 `logs` 段自动补齐）。
+**一步引入**（既有 / 新增项目相同）：
 
-demo 使用的 `http-request-log` 类型提供 `GET /api/admin/requests/{requestId}` 内存日志端点；真实项目接 ES 时实现同语义查询即可，Context Pack 结构不变。
+1. 加依赖（本地构建：`cd sdk/forgeops-spring-boot-starter && mvn install`）：
+   ```xml
+   <dependency>
+     <groupId>com.forgeops</groupId>
+     <artifactId>forgeops-spring-boot-starter</artifactId>
+     <version>0.1.0-SNAPSHOT</version>
+   </dependency>
+   ```
+2. 可选配置（默认已可用，通常零配置）：
+   ```yaml
+   forgeops:
+     tracing:
+       enabled: true              # 引入依赖即默认开启；false 可整体停用
+       version-endpoint: true     # GET /api/version（version/commit）
+       expose-request-logs: true  # GET /api/admin/requests/{requestId}
+       tracked-requests: 500      # 内存请求日志缓冲量
+   ```
+
+引入后自动获得（Spring Boot 3.x / 4.x 均可，编译基线 Boot 3.4 + Java 17+）：
+
+- **Request-ID 链路**：读取/生成 `X-Request-ID`（ULID，与前端 SDK 一致）→ MDC → 响应头回显
+- **结构化 JSON 访问日志**（logger `ACCESS`）：requestId/traceId/service/uri/httpMethod/status/durationMs/version/commitSha/exception
+- **`GET /api/version`**：返回 `{service, version, commit}`（读取应用 Maven build-info，`spring-boot-maven-plugin` 配 `build-info` goal 即含 commit）
+- **`GET /api/admin/requests/{requestId}`**：内存请求日志查询（ForgeOps Gateway Context Pack 的 `logs` 段即按此拉取）
+
+真实项目接 ES 时，把 Project Registry 的 `observability.logs.type` 配为 `elasticsearch` 并实现同语义查询即可，Context Pack 结构不变。
+
+> 零依赖说明：Starter 不绑定 Jackson（手工 JSON 输出 + 端点返回 Map 由宿主序列化），因此同时兼容 Jackson 2（Boot 3）与 Jackson 3（Boot 4）。Boot 2（javax.servlet）项目请沿用手工方式（复制 `sdk/forgeops-spring-boot-starter` 中 `RequestIdFilter`/`RequestLogStore`，包名换 javax）。
 
 ---
 
