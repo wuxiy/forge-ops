@@ -49,7 +49,12 @@ export class ForgeOpsGatewayClient {
     })
   }
 
-  verifyFail(id: string, verifierName: string, comment: string, extra?: { requests?: RequestSummary[]; consoleErrors?: string[] }): Promise<unknown> {
+  verifyFail(
+    id: string,
+    verifierName: string,
+    comment: string,
+    extra?: { requests?: RequestSummary[]; consoleErrors?: string[] },
+  ): Promise<unknown> {
     return this.request(`/api/v1/feedback/${encodeURIComponent(id)}/reopen`, {
       method: 'POST',
       body: JSON.stringify({ verifierName, comment, requests: extra?.requests || [], consoleErrors: extra?.consoleErrors || [] }),

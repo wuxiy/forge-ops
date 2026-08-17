@@ -60,9 +60,7 @@ export interface ForgeOpsOptions {
   getBackendInfo?: () => { version?: string; commit?: string } | null | undefined
   /** 请求缓冲区大小，默认 50 */
   requestBufferSize?: number
-  /** 截图功能（需要安装可选依赖 html2canvas），默认关闭 */
-  screenshotEnabled?: boolean
-  /** 路由名称提取（配合 vue-router） */
+  /** 路由名称提取（配合 vue-router / react-router） */
   getRouteName?: () => string | undefined
 }
 
@@ -82,7 +80,7 @@ export interface FeedbackListItem {
 }
 
 export interface FeedbackTimelineItem {
-  id: string
+  id: number
   authorType: string
   author: string
   content: string

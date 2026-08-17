@@ -1,0 +1,18 @@
+{
+  "name": "@forgeops/demo-vue2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "echo vue2-demo: skip typecheck"
+  },
+  "dependencies": {
+    "@forgeops/feedback-vue2": "workspace:*",
+    "vue": "^2.7.16"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue2": "^2.3.3",
+    "vite": "^5.4.0"
+  }
+}

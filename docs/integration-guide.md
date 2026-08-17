@@ -1,36 +1,71 @@
 # ForgeOps V0.1 接入指南
 
-本文说明三件事：① 真实 Vue 项目接入 Feedback SDK（5 步）；② 真实 Spring Boot 接入 Request-ID 链路；③ 真实 CI/CD 回调对接契约。
+本文说明三件事：① 前端项目接入 Feedback SDK（Vue2 / Vue3 / React，均为「加依赖 + 几行配置」）；② Spring Boot 接入 Request-ID 链路（Starter 一行依赖）；③ 真实 CI/CD 回调对接契约。
+
+> 前端架构：`@forgeops/feedback-core`（框架无关采集/客户端）+ `@forgeops/feedback-dom`（唯一 UI 实现）+ 三个框架薄壳。三栈行为完全一致。
 
 ---
 
-## 一、Vue 项目接入 Feedback SDK（≤5 步）
+## 一、前端接入（Vue2 / Vue3 / React）
 
-> 参考实现：`examples/demo-app/web`
+### Vue 3（参考：examples/demo-app/web）
 
-1. **安装依赖**（monorepo 内 `workspace:*`，或发布后 `npm i @forgeops/feedback-vue`）
-2. **注册插件**（main.ts）：
-   ```ts
-   import { createForgeOps } from '@forgeops/feedback-vue'
+```bash
+pnpm add @forgeops/feedback-vue
+```
+```ts
+// main.ts
+import { createForgeOps } from '@forgeops/feedback-vue'
 
-   const forgeops = createForgeOps({
-     gatewayUrl: 'http://<gateway-host>:18090',   // ForgeOps Gateway
-     projectId: '<project-id>',                  // 与 registry/projects/<id>.yaml 一致
-     environment: 'test',                        // test/uat/staging，其他环境自动禁用
-     getReporter: () => ({ id: user.id, name: user.name }),  // 接宿主登录态（可选）
-     getFrontendInfo: () => ({ version: __APP_VERSION__, commit: __APP_COMMIT__ }),
-     getBackendInfo: () => backendInfo,          // 启动时从 /api/version 拉取后注入（可选）
-     screenshotEnabled: false,                   // true 需安装可选依赖 html2canvas
-   })
-   app.use(forgeops.plugin)
-   ```
-3. **挂载入口组件**：在根组件模板放 `<ForgeOpsWidget />`（右下角反馈入口 + 我的反馈）。
-4. **axios 项目**（可选）：SDK 已全局 patch fetch；axios 项目另挂 `RequestContextCollector` 的拦截器（参考 SDK README）。
-5. **提供后端版本接口** `/api/version` 返回 `{version, commit}`（见第二步）。
+const forgeops = createForgeOps({
+  gatewayUrl: 'http://<gateway-host>:18090',   // ForgeOps Gateway
+  projectId: '<project-id>',                  // 与 registry/projects/<id>.yaml 一致
+  environment: 'test',                        // test/uat/staging，其他环境自动禁用
+  getReporter: () => ({ id: user.id, name: user.name }),  // 接宿主登录态（可选，否则表单填写）
+  getFrontendInfo: () => ({ version: __APP_VERSION__, commit: __APP_COMMIT__ }),
+  getBackendInfo: () => backendInfo,          // 启动时从 /api/version 拉取后注入（可选）
+})
+app.use(forgeops.plugin)   // 右下角自动出现「反馈」入口；旧版 <ForgeOpsWidget /> 兼容无需移除
+```
 
-验证：测试环境打开页面 → 右下角出现「反馈」→ 提交后 Gateway 返回 `FB-xxxx` → 「我的反馈」可见状态流转。
+### Vue 2（参考：examples/demo-app/vue2-demo）
 
-**采集白名单**（只采集这些，其余一律不采集）：URL/Route/页面标题、前后端 version/commit、登录用户（宿主注入）、浏览器/OS/屏幕、最近失败请求的 method/url/status/耗时/requestId/traceId、console error、截图（可选）。Authorization/Cookie/请求体/响应体永不采集。
+```bash
+pnpm add @forgeops/feedback-vue2
+```
+```js
+// main.js
+import { createForgeOps } from '@forgeops/feedback-vue2'
+
+Vue.use(createForgeOps({ gatewayUrl, projectId, environment: 'test' }))  // 入口自动挂载
+```
+
+### React（参考：examples/demo-app/react-demo）
+
+```bash
+pnpm add @forgeops/feedback-react
+```
+```tsx
+// main.tsx（方式一：一行全局初始化，推荐）
+initForgeOpsFeedback({ gatewayUrl, projectId, environment: 'test' })
+
+// 方式二：组件挂载（随组件生命周期创建/销毁）
+<ForgeOpsFeedback options={options}><App /></ForgeOpsFeedback>
+```
+
+### axios 项目（可选）
+
+SDK 已全局 patch fetch；axios 请求另挂拦截器（core 提供，无 axios 依赖）：
+
+```ts
+import { attachAxios, useForgeOpsCollector } from '@forgeops/feedback-<vue|vue2|react>'
+// 任意位置拿到 collector（如 vue3 经 provide/context；或自行 new RequestContextCollector）
+attachAxios(axiosInstance, collector)
+```
+
+验证：测试环境打开页面 → 右下角出现「反馈」→ 提交后返回 `FB-xxxx` → 「我的反馈」可见状态流转与验证入口。三栈实测记录：FB-1003（Vue2）、FB-1004（React）、FB-1002（Vue3 全闭环）。
+
+**采集白名单**（只采集这些，其余一律不采集）：URL/Route/页面标题、前后端 version/commit、登录用户（宿主注入）、浏览器/OS/屏幕、最近失败请求的 method/url/status/耗时/requestId/traceId、console error。Authorization/Cookie/请求体/响应体永不采集。
 
 ---
 

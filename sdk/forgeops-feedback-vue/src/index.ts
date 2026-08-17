@@ -1,61 +1,65 @@
-import { App, inject, reactive } from 'vue'
-import ForgeOpsWidget from './ui/ForgeOpsWidget.vue'
-import { RequestContextCollector } from './collector'
-import { ForgeOpsGatewayClient } from './gateway'
-import type { ForgeOpsOptions } from './types'
+import type { App } from 'vue'
+import { defineComponent } from 'vue'
+import { FeedbackCore } from '@forgeops/feedback-core'
+import type { ForgeOpsOptions } from '@forgeops/feedback-core'
+import { initForgeOpsFeedback } from '@forgeops/feedback-dom'
+import type { ForgeOpsFeedbackHandle } from '@forgeops/feedback-dom'
 
-export * from './types'
-export { RequestContextCollector, ForgeOpsGatewayClient }
+export * from '@forgeops/feedback-core'
+export type { ForgeOpsFeedbackHandle } from '@forgeops/feedback-dom'
 
+const FORGEOPS_KEY = Symbol('forgeops')
+
+/** 兼容旧版（v0.1 SFC 版）的上下文形状。 */
 export interface ForgeOpsContext {
   options: ForgeOpsOptions
-  collector: RequestContextCollector
-  client: ForgeOpsGatewayClient
-  /** 上次提交人（我的反馈默认查询者） */
+  collector: import('@forgeops/feedback-core').RequestContextCollector
+  client: import('@forgeops/feedback-core').ForgeOpsGatewayClient
   lastReporter: { name: string }
   getReporter(): { id?: string; name: string } | null
 }
 
-const FORGEOPS_KEY = Symbol('forgeops')
-
 export function createForgeOps(options: ForgeOpsOptions) {
-  const enabledEnvironments = options.enabledEnvironments ?? ['test', 'uat', 'staging']
-  const enabled = enabledEnvironments.includes(options.environment)
-
-  const collector = new RequestContextCollector(options.requestBufferSize ?? 50)
-  const client = new ForgeOpsGatewayClient(options.gatewayUrl)
-  const state = reactive({ lastReporterName: '' })
-
+  const core = new FeedbackCore(options)
+  let handle: ForgeOpsFeedbackHandle | null = null
+  const lastReporter = {
+    get name() {
+      return core.lastReporterName
+    },
+    set name(v: string) {
+      core.setReporterName(v)
+    },
+  }
   const context: ForgeOpsContext = {
     options,
-    collector,
-    client,
-    get lastReporter() {
-      return { name: state.lastReporterName }
-    },
-    getReporter() {
-      const fromApp = options.getReporter?.()
-      if (fromApp?.name) return fromApp
-      return state.lastReporterName ? { name: state.lastReporterName } : null
-    },
+    collector: core.collector,
+    client: core.client,
+    lastReporter,
+    getReporter: () => core.getReporter(),
   }
 
   const plugin = {
     install(app: App) {
-      if (!enabled) return
-      app.provide(FORGEOPS_KEY, context)
-      app.component('ForgeOpsWidget', ForgeOpsWidget)
-      collector.start()
+      core.start()
+      if (core.enabled && typeof document !== 'undefined') {
+        handle = initForgeOpsFeedback(options)
+      }
+      app.provide(FORGEOPS_KEY, { core, handle })
     },
   }
 
-  return { plugin, context, enabled }
+  return { plugin, context, enabled: core.enabled, open: () => handle?.open(), close: () => handle?.close() }
 }
 
-export function useForgeOps(): ForgeOpsContext {
-  const ctx = inject<ForgeOpsContext>(FORGEOPS_KEY)
-  if (!ctx) throw new Error('[ForgeOps] plugin not installed: app.use(createForgeOps(...).plugin)')
-  return ctx
-}
+/**
+ * 兼容占位组件：v0.2 起 UI 由 install 自动挂载（body），
+ * 旧项目的 <ForgeOpsWidget /> 无需移除，渲染为空节点。
+ */
+export const ForgeOpsWidget = defineComponent({
+  name: 'ForgeOpsWidget',
+  setup() {
+    return () => null
+  },
+})
 
 export { FORGEOPS_KEY }

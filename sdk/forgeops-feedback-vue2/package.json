@@ -1,7 +1,7 @@
 {
-  "name": "@forgeops/feedback-vue",
-  "version": "0.2.0",
-  "description": "ForgeOps Feedback SDK for Vue 3 - in-app feedback entry, context collection and verification loop",
+  "name": "@forgeops/feedback-vue2",
+  "version": "0.1.0",
+  "description": "ForgeOps Feedback SDK for Vue 2 - app.use() once, feedback entry mounted automatically",
   "type": "module",
   "main": "./src/index.ts",
   "module": "./src/index.ts",
@@ -17,18 +17,16 @@
     "dist"
   ],
   "scripts": {
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@forgeops/feedback-core": "workspace:*",
     "@forgeops/feedback-dom": "workspace:*"
   },
   "peerDependencies": {
-    "vue": "^3.4.0"
+    "vue": "^2.6.0"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "vue": "^3.5.0",
-    "vue-tsc": "^2.1.0"
+    "typescript": "^5.6.0"
   }
 }

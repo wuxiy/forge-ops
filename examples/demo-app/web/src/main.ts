@@ -25,7 +25,6 @@ const forgeops = createForgeOps({
   },
   getFrontendInfo: () => ({ version: __APP_VERSION__, commit: __APP_COMMIT__ }),
   getBackendInfo: () => backendInfo,
-  screenshotEnabled: false,
 })
 
 createApp(App).use(forgeops.plugin).mount('#app')

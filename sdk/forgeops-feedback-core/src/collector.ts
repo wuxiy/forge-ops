@@ -114,4 +114,66 @@ export class RequestContextCollector {
   consoleErrorList(): string[] {
     return [...this.consoleErrors]
   }
+
+  /** axios 项目：手动登记一条请求摘要（配合 attachAxios 使用）。 */
+  recordAxios(summary: RequestSummary): void {
+    this.record(summary)
+  }
+}
+
+/** 最小 axios 类型面（避免引 axios 依赖，运行时鸭子类型即可）。 */
+interface AxiosLike {
+  interceptors: {
+    request: { use: (fn: (config: Record<string, unknown>) => Record<string, unknown>) => unknown }
+    response: {
+      use: (
+        onFulfilled: (response: Record<string, unknown>) => Record<string, unknown>,
+        onRejected?: (error: AxiosErrorLike) => unknown,
+      ) => unknown
+    }
+  }
+}
+
+interface AxiosErrorLike {
+  config?: Record<string, unknown>
+  response?: { status?: number; headers?: Record<string, string> }
+}
+
+/**
+ * axios 项目挂接：请求注入 X-Request-ID，响应登记白名单摘要。
+ * 用法：attachAxios(axios) 或 attachAxios(axiosInstance)
+ */
+export function attachAxios(axiosInstance: AxiosLike, collector: RequestContextCollector): void {
+  axiosInstance.interceptors.request.use((config) => {
+    const headers = (config.headers ?? {}) as Record<string, string>
+    if (!headers['X-Request-ID']) headers['X-Request-ID'] = ulid()
+    config.headers = headers
+    return config
+  })
+  axiosInstance.interceptors.response.use(
+    (response) => {
+      const headers = (response.headers ?? {}) as Record<string, string>
+      collector.recordAxios({
+        method: String((response.config as Record<string, unknown>)?.method ?? 'GET').toUpperCase(),
+        url: String((response.config as Record<string, unknown>)?.url ?? ''),
+        status: Number(response.status ?? 0),
+        durationMs: headers['X-Duration-Ms'] ? Number(headers['X-Duration-Ms']) : undefined,
+        requestId: headers['X-Request-ID'] ?? (headers['x-request-id'] as string | undefined),
+        time: new Date().toISOString(),
+      })
+      return response
+    },
+    (error: AxiosErrorLike) => {
+      const cfg = error?.config ?? {}
+      const headers = (error?.response?.headers ?? {}) as Record<string, string>
+      collector.recordAxios({
+        method: String(cfg.method ?? 'GET').toUpperCase(),
+        url: String(cfg.url ?? ''),
+        status: Number(error?.response?.status ?? 0),
+        requestId: headers['X-Request-ID'] ?? (headers['x-request-id'] as string | undefined),
+        time: new Date().toISOString(),
+      })
+      return Promise.reject(error)
+    },
+  )
 }
