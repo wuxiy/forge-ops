@@ -1,0 +1,26 @@
+{
+  "name": "@forgeops/tracing-fastify",
+  "version": "0.1.0",
+  "description": "ForgeOps Request-ID tracing plugin for Fastify 5 (zero-dependency single file)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": ["src"],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "fastify": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "fastify": "^5.8.0",
+    "typescript": "^5.6.0"
+  }
+}

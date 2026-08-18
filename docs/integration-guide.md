@@ -104,6 +104,34 @@ attachAxios(axiosInstance, collector)
 
 > 零依赖说明：Starter 不绑定 Jackson（手工 JSON 输出 + 端点返回 Map 由宿主序列化），因此同时兼容 Jackson 2（Boot 3）与 Jackson 3（Boot 4）。Boot 2（javax.servlet）项目请沿用手工方式（复制 `sdk/forgeops-spring-boot-starter` 中 `RequestIdFilter`/`RequestLogStore`，包名换 javax）。
 
+## 二·B、Node.js（Fastify 5）接入 Request-ID 链路
+
+> 参考实现：akso-agent-databot（`server/src/forgeops/tracing.ts` + index.ts 三行注册）
+
+零依赖单文件插件（源头 `sdk/forgeops-tracing-fastify`），复制到目标项目即可：
+
+```ts
+// server/src/index.ts —— 注意用「直接调用」而非 app.register：
+// Fastify 插件默认封装（encapsulation），register 形式 hooks 只作用于插件 scope，
+// 无法覆盖业务路由；setupForgeopsTracing 直接调用才能全量生效。
+import { setupForgeopsTracing } from './forgeops/tracing.js'
+
+await setupForgeopsTracing(app, {
+  serviceName: 'your-service',       // 日志与 /api/version 中的服务名
+  version: '1.0.0', commit: 'xxx',   // 可选，默认读 APP_VERSION/APP_COMMIT env
+  logger,                            // 可选，复用宿主 pino；缺省 console
+})
+```
+
+自动获得与 Spring Boot Starter 等价能力：X-Request-ID 透传/回显（ULID）、结构化访问日志（含 exception）、`GET /api/version`、`GET /api/admin/requests/{requestId}`。实测：akso FB-1005 的 Context Pack 自动补齐 10 条 Fastify 日志摘录。
+
+**前端跨仓库分发**（目标项目不在本 monorepo）：`node scripts/build-integration-bundle.mjs` 生成自包含单文件（`forgeops-feedback.mjs` + `.d.ts`，react 外部化），复制进目标项目 `src/forgeops/` 后：
+
+```tsx
+import { initForgeOpsFeedback } from './forgeops/forgeops-feedback.mjs'
+initForgeOpsFeedback({ gatewayUrl, projectId, environment: 'test' })
+```
+
 ---
 
 ## 三、CI/CD 回调对接（现有流水线加 3 个 curl）

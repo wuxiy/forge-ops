@@ -4,6 +4,7 @@ packages:
   - sdk/forgeops-feedback-vue
   - sdk/forgeops-feedback-vue2
   - sdk/forgeops-feedback-react
+  - sdk/forgeops-tracing-fastify
   - examples/demo-app/web
   - examples/demo-app/react-demo
   - examples/demo-app/vue2-demo

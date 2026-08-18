@@ -1,0 +1,53 @@
+id: akso-agent-databot
+name: 数据智能体 DataAgent（akso）
+
+feedback:
+  enabled: true
+
+frontend:
+  framework: react
+  repo: internal/akso/akso-agent-databot
+  repoProvider: other
+  path: client
+  defaultBranch: master
+
+backend:
+  framework: fastify
+  repo: internal/akso/akso-agent-databot
+  repoProvider: other
+  path: server
+  defaultBranch: master
+
+runtime:
+  pool: forgeops-local
+
+observability:
+  logs:
+    type: http-request-log
+    service: akso-agent-databot
+    baseUrl: http://127.0.0.1:8286
+
+multica:
+  workspace: engineering
+  project: akso-agent-databot
+  triageAgent: forgeops-triage
+  codingAgent: forgeops-coding
+
+ci:
+  provider: simulated
+  pipeline: akso-test
+
+environments:
+  test:
+    frontendUrl: http://localhost:5176
+    backendUrl: http://localhost:8286
+
+policy:
+  autoAnalyze: true
+  autoCode: true
+  autoPR: true
+  autoMerge: false
+  autoDeploy: false
+
+security:
+  piiProfile: healthcare-strict
