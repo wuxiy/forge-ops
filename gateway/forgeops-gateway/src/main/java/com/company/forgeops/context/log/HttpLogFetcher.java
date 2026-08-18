@@ -31,6 +31,14 @@ public class HttpLogFetcher {
         return "http-request-log".equals(type);
     }
 
+    /** 强制 HTTP/1.1：JDK HttpClient 默认发 Upgrade: h2c，会被 @fastify/websocket 全局校验拒为 400 Invalid Upgrade header。 */
+    private static final RestClient REST_CLIENT = RestClient.builder()
+            .requestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory(
+                    java.net.http.HttpClient.newBuilder()
+                            .version(java.net.http.HttpClient.Version.HTTP_1_1)
+                            .build()))
+            .build();
+
     @SuppressWarnings("unchecked")
     public LogExcerpt fetch(ProjectConfig config, String requestId) {
         if (!supports(config) || requestId == null || requestId.isBlank()) {
@@ -39,7 +47,7 @@ public class HttpLogFetcher {
         String baseUrl = config.observability().logs().baseUrl();
         String service = config.observability().logs().service();
         try {
-            Map<String, Object> response = RestClient.create().get()
+            Map<String, Object> response = REST_CLIENT.get()
                     .uri(baseUrl + "/api/admin/requests/{requestId}", requestId)
                     .retrieve()
                     .body(Map.class);
