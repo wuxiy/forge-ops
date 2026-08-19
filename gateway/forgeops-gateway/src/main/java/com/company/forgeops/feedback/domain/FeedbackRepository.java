@@ -11,6 +11,10 @@ public interface FeedbackRepository extends JpaRepository<Feedback, Long> {
 
     Optional<Feedback> findByMulticaIssueId(String multicaIssueId);
 
+    Optional<Feedback> findByFeedbackPrefixAndDisplayNo(String feedbackPrefix, Long displayNo);
+
+    Optional<Feedback> findByFeedbackPrefixIsNullAndDisplayNo(Long displayNo);
+
     List<Feedback> findByStatusIn(List<FeedbackStatus> statuses);
 
     List<Feedback> findByReporterNameAndProjectId(String reporterName, String projectId, Pageable pageable);

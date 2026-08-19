@@ -3,6 +3,7 @@ name: Demo App（ForgeOps 试点）
 
 feedback:
   enabled: true
+  prefix: DEMO
 
 frontend:
   framework: vue

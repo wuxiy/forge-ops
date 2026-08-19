@@ -162,14 +162,16 @@ public class CallbackService {
         if (feedbackId == null || feedbackId.isBlank()) {
             return null;
         }
-        String numeric = feedbackId.startsWith("FB-") ? feedbackId.substring(3) : feedbackId;
-        Long id;
-        try {
-            id = Long.valueOf(numeric);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("feedbackId 非法: " + feedbackId);
+        var parsed = com.company.forgeops.feedback.domain.FeedbackIdentifier.parse(feedbackId);
+        if (parsed == null) {
+            throw new IllegalArgumentException("feedbackId 非法（期望 ADB-FB-1001 或 FB-1002）: " + feedbackId);
         }
-        return feedbackRepository.findById(id)
+        // 带前缀标识精确定位；旧格式 FB-n 兼容：先按 display_no 精确匹配，回退主键 id（历史数据回填前）
+        return feedbackRepository.findByFeedbackPrefixAndDisplayNo(parsed.prefix(), parsed.displayNo())
+                .or(() -> parsed.prefix() == null
+                        ? feedbackRepository.findByFeedbackPrefixIsNullAndDisplayNo(parsed.displayNo())
+                        : java.util.Optional.<Feedback>empty())
+                .or(() -> feedbackRepository.findById(parsed.displayNo()))
                 .orElseThrow(() -> new IllegalArgumentException("反馈不存在: " + feedbackId));
     }
 }

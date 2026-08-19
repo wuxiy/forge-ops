@@ -44,6 +44,12 @@ public class Feedback {
     @Column(columnDefinition = "TEXT")
     private String note;
 
+    @Column(name = "feedback_prefix", length = 16)
+    private String feedbackPrefix;
+
+    @Column(name = "display_no")
+    private Long displayNo;
+
     @Column(name = "reporter_id", length = 64)
     private String reporterId;
 
@@ -93,9 +99,10 @@ public class Feedback {
     @Column(name = "updated_at", nullable = false, columnDefinition = "TIMESTAMPTZ")
     private OffsetDateTime updatedAt;
 
-    /** 对外标识：FB-1023。 */
+    /** 对外标识：带项目前缀 ADB-FB-1001；未配置前缀时为旧格式 FB-1002。 */
     public String identifier() {
-        return "FB-" + id;
+        String no = displayNo != null ? String.valueOf(displayNo) : String.valueOf(id);
+        return feedbackPrefix == null || feedbackPrefix.isBlank() ? "FB-" + no : feedbackPrefix + "-FB-" + no;
     }
 
     @PrePersist
@@ -149,6 +156,14 @@ public class Feedback {
     public String getNote() { return note; }
 
     public void setNote(String note) { this.note = note; }
+
+    public String getFeedbackPrefix() { return feedbackPrefix; }
+
+    public void setFeedbackPrefix(String feedbackPrefix) { this.feedbackPrefix = feedbackPrefix; }
+
+    public Long getDisplayNo() { return displayNo; }
+
+    public void setDisplayNo(Long displayNo) { this.displayNo = displayNo; }
 
     public String getReporterId() { return reporterId; }
 

@@ -29,14 +29,17 @@ public class FeedbackController {
     private final FeedbackService feedbackService;
     private final FeedbackCommentRepository commentRepository;
     private final VerificationService verificationService;
+    private final com.company.forgeops.feedback.domain.FeedbackRepository feedbackRepository;
 
     public FeedbackController(
             FeedbackService feedbackService,
             FeedbackCommentRepository commentRepository,
-            VerificationService verificationService) {
+            VerificationService verificationService,
+            com.company.forgeops.feedback.domain.FeedbackRepository feedbackRepository) {
         this.feedbackService = feedbackService;
         this.commentRepository = commentRepository;
         this.verificationService = verificationService;
+        this.feedbackRepository = feedbackRepository;
     }
 
     @PostMapping
@@ -56,14 +59,14 @@ public class FeedbackController {
 
     @GetMapping("/{id}")
     public FeedbackDetailDto detail(@PathVariable String id) {
-        Feedback feedback = feedbackService.getById(parseId(id));
+        Feedback feedback = resolveFeedback(id);
         List<FeedbackComment> comments = commentRepository.findByFeedbackIdOrderByCreatedAtAsc(feedback.getId());
         return FeedbackDetailDto.from(feedback, comments);
     }
 
     @PostMapping("/{id}/comment")
     public Map<String, String> comment(@PathVariable String id, @RequestBody Map<String, String> body) {
-        Feedback feedback = feedbackService.getById(parseId(id));
+        Feedback feedback = resolveFeedback(id);
         FeedbackComment comment = new FeedbackComment();
         comment.setFeedbackId(feedback.getId());
         comment.setAuthorType("USER");
@@ -76,7 +79,7 @@ public class FeedbackController {
     @PostMapping("/{id}/verify")
     public Map<String, String> verify(@PathVariable String id, @RequestBody Map<String, String> body) {
         Feedback feedback = verificationService.verifyPass(
-                parseId(id),
+                resolveFeedback(id).getId(),
                 body.getOrDefault("verifierName", "unknown"),
                 body.get("verifierId"),
                 body.get("comment"));
@@ -86,7 +89,7 @@ public class FeedbackController {
     @PostMapping("/{id}/reopen")
     public Map<String, String> reopen(@PathVariable String id, @RequestBody ReopenRequest body) {
         Feedback feedback = verificationService.verifyFail(
-                parseId(id),
+                resolveFeedback(id).getId(),
                 body.verifierName() == null ? "unknown" : body.verifierName(),
                 body.verifierId(),
                 body.comment(),
@@ -103,12 +106,17 @@ public class FeedbackController {
             List<String> consoleErrors) {
     }
 
-    static Long parseId(String id) {
-        String numeric = id != null && id.startsWith("FB-") ? id.substring(3) : id;
-        try {
-            return Long.valueOf(numeric);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("反馈 ID 非法: " + id);
+    /** 按对外标识精确定位（ADB-FB-1001 / 旧 FB-1002）。 */
+    Feedback resolveFeedback(String id) {
+        var parsed = com.company.forgeops.feedback.domain.FeedbackIdentifier.parse(id);
+        if (parsed == null) {
+            throw new IllegalArgumentException("反馈 ID 非法（期望 ADB-FB-1001 或 FB-1002）: " + id);
         }
+        return feedbackRepository
+                .findByFeedbackPrefixAndDisplayNo(parsed.prefix(), parsed.displayNo())
+                .or(() -> parsed.prefix() == null
+                        ? feedbackRepository.findByFeedbackPrefixIsNullAndDisplayNo(parsed.displayNo())
+                        : java.util.Optional.<Feedback>empty())
+                .orElseThrow(() -> new IllegalArgumentException("反馈不存在: " + id));
     }
 }

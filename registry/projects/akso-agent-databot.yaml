@@ -3,6 +3,7 @@ name: 数据智能体 DataAgent（akso）
 
 feedback:
   enabled: true
+  prefix: ADB
 
 frontend:
   framework: react

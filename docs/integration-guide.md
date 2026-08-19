@@ -157,7 +157,9 @@ initForgeOpsFeedback({ gatewayUrl, projectId, environment: 'test' })
 
 ## 四、新项目接入清单
 
-1. `registry/projects/<id>.yaml` 一份（repo/branch/agents/policy/observability）
+1. `registry/projects/<id>.yaml` 一份（repo/branch/agents/policy/observability/**feedback.prefix**）
+
+**反馈编号规则**：registry 配置 `feedback.prefix`（项目短码，如 akso-agent-databot→`ADB`）后，该项目反馈编号为 `ADB-FB-1001` 起独立递增；未配置则沿用全局 `FB-n`。multica 侧 workspace/project 也在此 YAML 配置（`multica.workspace`/`multica.project` 按名称自动解析）。Agent 产出的 MR 标题模板：`fix(<反馈标识> / <multica Issue标识>): <摘要>`（如 `fix(ADB-FB-1001 / AKSO-2): ...`）——multica 靠 Issue 标识自动关联 MR。
 2. `POST /api/v1/projects/reload` 或重启 Gateway
 3. 业务前端接入 SDK（上面第一节）
 4. 业务后端接入 Request-ID 链路（上面第二节）

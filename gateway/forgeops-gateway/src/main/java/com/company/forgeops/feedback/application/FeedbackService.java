@@ -26,6 +26,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +49,7 @@ public class FeedbackService {
     private final PiiSanitizer sanitizer;
     private final AuditService audit;
     private final Path screenshotDir;
+    private final JdbcTemplate jdbcTemplate;
 
     public FeedbackService(
             FeedbackRepository feedbackRepository,
@@ -59,7 +61,9 @@ public class FeedbackService {
             MulticaIssueService multicaIssueService,
             PiiSanitizer sanitizer,
             AuditService audit,
+            JdbcTemplate jdbcTemplate,
             @Value("${forgeops.storage.screenshot-dir}") String screenshotDir) {
+        this.jdbcTemplate = jdbcTemplate;
         this.feedbackRepository = feedbackRepository;
         this.contextRepository = contextRepository;
         this.commentRepository = commentRepository;
@@ -80,9 +84,13 @@ public class FeedbackService {
             throw new IllegalArgumentException("项目 " + submission.projectId() + " 未开启反馈通道");
         }
 
-        // 1. 落库（SUBMITTED）
+        // 1. 落库（SUBMITTED）：带项目前缀的独立编号（如 ADB-FB-1001），未配置前缀走旧式全局
         Feedback feedback = new Feedback();
         feedback.setProjectId(submission.projectId());
+        feedback.setFeedbackPrefix(project.feedbackPrefix());
+        if (project.feedbackPrefix() != null) {
+            feedback.setDisplayNo(nextProjectNumber(project.feedbackPrefix()));
+        }
         feedback.setType(submission.type());
         String title = submission.title() != null && !submission.title().isBlank()
                 ? submission.title()
@@ -131,6 +139,16 @@ public class FeedbackService {
                 "type=" + feedback.getType() + ", contextPackV1 已生成, multicaIssue="
                         + feedback.getMulticaIssueId());
         return feedback;
+    }
+
+    /** 项目内独立取号（原子 upsert-returning，序号从 1001 起）。 */
+    private Long nextProjectNumber(String prefix) {
+        Long next = jdbcTemplate.queryForObject(
+                "INSERT INTO forgeops_project_sequence(prefix, last_value) VALUES (?, 1000) " +
+                "ON CONFLICT (prefix) DO UPDATE SET last_value = forgeops_project_sequence.last_value + 1 " +
+                "RETURNING last_value + 1",
+                Long.class, prefix);
+        return next == null ? 1001L : next;
     }
 
     private void createMulticaIssue(Feedback feedback, ProjectConfig project, Map<String, Object> contextPack) {

@@ -5,7 +5,7 @@
 ## 铁律（违反即失败）
 
 1. **只允许操作 Context Pack `git` 段声明的仓库**，只允许在其中 `frontend.path` / `backend.path` 范围内改动（及其直接测试）。
-2. 分支命名：`feature/agent/<反馈编号>`（如 `feature/agent/FB-1001`，编号取 Issue 正文"来源反馈"）。
+2. 分支命名：`feature/agent/<反馈完整标识>`（如 `feature/agent/ADB-FB-1001`，标识取 Issue 正文"来源反馈"，含项目前缀）。
 3. **禁止** push 到 main/master/develop/release-*；**禁止** merge PR；**禁止**触发部署；**禁止**读取任何无关凭据。
 4. PR 必须是 **Draft**，PR 描述必须包含规定模板。
 5. 无法安全完成时输出 `CODING_RESULT: FAILED` 或 `CODING_RESULT: NEED_INFO`，不要硬修。
@@ -23,7 +23,7 @@
    - **github**：优先 `gh pr create --draft`；或用环境变量 `FORGEOPS_GITHUB_TOKEN` 调 GitHub API `POST /repos/{repo}/pulls`（`"draft": true`）。
    - **gitlab**：用环境变量 `FORGEOPS_GITLAB_TOKEN` / `FORGEOPS_GITLAB_URL` / `FORGEOPS_GITLAB_PROJECT` 调 GitLab API：
      `POST {FORGEOPS_GITLAB_URL}/api/v4/projects/{FORGEOPS_GITLAB_PROJECT}/merge_requests?source_branch=<分支>&target_branch=<defaultBranch>&title=<标题>&description=<§15模板>`（Header `PRIVATE-TOKEN`；标题加 `[Draft]` 前缀，`remove_source_branch=true`）。
-     **注意**：MR 标题必须包含本 Issue 的 identifier（如 `AKSO-2`，格式 `fix(FB-xxxx / AKSO-n): ...`）——multica 靠标题/分支中的 identifier 自动关联 MR 与 Issue；仅在描述正文提及不会生效。
+     **注意**：MR 标题采用双编号模板 `fix(<反馈标识> / <Issue标识>): <摘要>`（如 `fix(ADB-FB-1001 / AKSO-2): ...`）——multica 靠标题/分支中的 Issue identifier（AKSO-n）自动关联 MR 与 Issue，反馈标识（项目前缀+编号）表达项目归属；仅在描述正文提及不会生效。
    - 都不可用时，输出 compare 链接并用 `CODING_RESULT: PR_PENDING_MANUAL` 标记。
 7. 用 §15 模板发评论回本 Issue。
 
