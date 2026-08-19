@@ -70,8 +70,9 @@ public class VerificationService {
         feedbackService.transition(feedback, FeedbackStatus.DONE, "原反馈人验证通过");
 
         if (feedback.getMulticaIssueId() != null) {
-            multicaClient.updateIssue(feedback.getMulticaIssueId(), "done", null);
-            multicaClient.addComment(feedback.getMulticaIssueId(),
+            String ws = multicaClient.resolveWorkspaceId(workspaceOf(feedback));
+            multicaClient.updateIssue(ws, feedback.getMulticaIssueId(), "done", null);
+            multicaClient.addComment(ws, feedback.getMulticaIssueId(),
                     "原反馈人 " + verifierName + " 验证通过，反馈 " + feedback.identifier() + " 关闭。");
         }
         audit.record(feedback.getId(), verifierName, "VERIFY_PASS", comment == null ? "" : comment);
@@ -104,10 +105,11 @@ public class VerificationService {
         // Multica 原 Issue Reopen + 重新指派 Triage Agent
         ProjectConfig project = registry.find(feedback.getProjectId()).orElse(null);
         if (feedback.getMulticaIssueId() != null) {
+            String ws = multicaClient.resolveWorkspaceId(workspaceOf(feedback));
             String triageAgentId = project == null || project.multica() == null ? null
-                    : multicaClient.findAgentIdByName(project.multica().triageAgent());
-            multicaClient.updateIssue(feedback.getMulticaIssueId(), "todo", triageAgentId);
-            multicaClient.addComment(feedback.getMulticaIssueId(),
+                    : multicaClient.findAgentIdByName(ws, project.multica().triageAgent());
+            multicaClient.updateIssue(ws, feedback.getMulticaIssueId(), "todo", triageAgentId);
+            multicaClient.addComment(ws, feedback.getMulticaIssueId(),
                     "反馈人 " + verifierName + " 验证未通过，问题 Reopen。\n\n验证说明：\n" + comment
                             + "\n\n请 Triage Agent 基于新增上下文继续分析（含新增失败请求与控制台错误）。");
         }
@@ -128,6 +130,12 @@ public class VerificationService {
         snapshot.setReason("REOPEN_APPEND");
         snapshot.setContextJson(ContextPackJson.toJson(pack));
         contextRepository.save(snapshot);
+    }
+
+    private String workspaceOf(Feedback feedback) {
+        return registry.find(feedback.getProjectId())
+                .map(p -> p.multica() == null ? null : p.multica().workspace())
+                .orElse(null);
     }
 
     private Feedback mustBeWaitingVerify(Long feedbackId) {

@@ -7,16 +7,16 @@ feedback:
 frontend:
   framework: react
   repo: internal/akso/akso-agent-databot
-  repoProvider: other
+  repoProvider: gitlab
   path: client
-  defaultBranch: master
+  defaultBranch: 027-knowledge-base
 
 backend:
   framework: fastify
   repo: internal/akso/akso-agent-databot
-  repoProvider: other
+  repoProvider: gitlab
   path: server
-  defaultBranch: master
+  defaultBranch: 027-knowledge-base
 
 runtime:
   pool: forgeops-local
@@ -28,7 +28,7 @@ observability:
     baseUrl: http://127.0.0.1:8286
 
 multica:
-  workspace: engineering
+  workspace: akso
   project: akso-agent-databot
   triageAgent: forgeops-triage
   codingAgent: forgeops-coding

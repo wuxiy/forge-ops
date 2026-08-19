@@ -30,6 +30,7 @@ public class CallbackService {
     private final MulticaClient multicaClient;
     private final HumanGate humanGate;
     private final AuditService audit;
+    private final com.company.forgeops.project.registry.ProjectRegistryService projectRegistryService;
 
     public CallbackService(
             IntegrationEventRepository eventRepository,
@@ -37,13 +38,15 @@ public class CallbackService {
             FeedbackService feedbackService,
             MulticaClient multicaClient,
             HumanGate humanGate,
-            AuditService audit) {
+            AuditService audit,
+            com.company.forgeops.project.registry.ProjectRegistryService projectRegistryService) {
         this.eventRepository = eventRepository;
         this.feedbackRepository = feedbackRepository;
         this.feedbackService = feedbackService;
         this.multicaClient = multicaClient;
         this.humanGate = humanGate;
         this.audit = audit;
+        this.projectRegistryService = projectRegistryService;
     }
 
     public record CallbackPayload(
@@ -142,7 +145,11 @@ public class CallbackService {
         feedbackService.addSystemComment(feedback, feedback.identifier() + " 已修复并部署到测试环境（"
                 + payload.environment() + "）。版本：" + payload.version() + "。请进行验证。");
         if (feedback.getMulticaIssueId() != null) {
-            multicaClient.addComment(feedback.getMulticaIssueId(),
+            String ws = multicaClient.resolveWorkspaceId(
+                    projectRegistryService.find(feedback.getProjectId())
+                            .map(p -> p.multica() == null ? null : p.multica().workspace())
+                            .orElse(null));
+            multicaClient.addComment(ws, feedback.getMulticaIssueId(),
                     "已发布测试环境（" + payload.environment() + "），版本 " + payload.version()
                             + "。原反馈人 " + feedback.getReporterName() + " 请验证。");
         }

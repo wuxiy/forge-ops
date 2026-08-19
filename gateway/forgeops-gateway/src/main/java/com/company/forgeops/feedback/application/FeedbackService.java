@@ -136,14 +136,19 @@ public class FeedbackService {
     private void createMulticaIssue(Feedback feedback, ProjectConfig project, Map<String, Object> contextPack) {
         String issueTitle = "[" + feedback.getType() + "] " + feedback.getTitle() + " (" + feedback.identifier() + ")";
         String body = multicaIssueService.renderIssueBody(feedback, contextPack, project);
+        String workspaceId = multicaClient.resolveWorkspaceId(
+                project.multica() == null ? null : project.multica().workspace());
+        String projectId = project.multica() == null ? null
+                : multicaClient.resolveProjectId(workspaceId, project.multica().project());
         String agentId = null;
         if (project.multica() != null && project.multica().triageAgent() != null) {
-            agentId = multicaClient.findAgentIdByName(project.multica().triageAgent());
+            agentId = multicaClient.findAgentIdByName(workspaceId, project.multica().triageAgent());
             if (agentId == null) {
-                log.warn("未找到 Triage Agent {}，Issue 将无人指派", project.multica().triageAgent());
+                log.warn("未找到 Triage Agent {}（workspace {}），Issue 将无人指派",
+                        project.multica().triageAgent(), workspaceId);
             }
         }
-        MulticaClient.Issue issue = multicaClient.createIssue(issueTitle, body, agentId);
+        MulticaClient.Issue issue = multicaClient.createIssue(workspaceId, projectId, issueTitle, body, agentId);
         feedback.setMulticaIssueId(issue.id());
         feedback.setMulticaIssueUrl(multicaClient.issueUrl(issue.id()));
         feedback.setStatus(FeedbackStatus.TRIAGING);

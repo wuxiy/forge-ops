@@ -19,8 +19,11 @@
    - 后端（Java）：在对应模块目录 `mvn -q test`
    - 前端（TS/Vue）：在对应模块目录 `pnpm typecheck`（有单测则一并运行）
 5. commit（信息格式：`fix(FB-xxxx): <概要>`），push 分支。
-6. 创建 **Draft PR**（base = defaultBranch）：
-   - 优先用 `gh pr create --draft`（若 gh 可用）；或用环境变量 `FORGEOPS_GITHUB_TOKEN` 调 GitHub API `POST /repos/{repo}/pulls`（`"draft": true`）；
+6. 创建 **Draft PR/MR**（base = defaultBranch），按 git.repoProvider 选择：
+   - **github**：优先 `gh pr create --draft`；或用环境变量 `FORGEOPS_GITHUB_TOKEN` 调 GitHub API `POST /repos/{repo}/pulls`（`"draft": true`）。
+   - **gitlab**：用环境变量 `FORGEOPS_GITLAB_TOKEN` / `FORGEOPS_GITLAB_URL` / `FORGEOPS_GITLAB_PROJECT` 调 GitLab API：
+     `POST {FORGEOPS_GITLAB_URL}/api/v4/projects/{FORGEOPS_GITLAB_PROJECT}/merge_requests?source_branch=<分支>&target_branch=<defaultBranch>&title=<标题>&description=<§15模板>`（Header `PRIVATE-TOKEN`；标题加 `[Draft]` 前缀，`remove_source_branch=true`）。
+     **注意**：MR 标题必须包含本 Issue 的 identifier（如 `AKSO-2`，格式 `fix(FB-xxxx / AKSO-n): ...`）——multica 靠标题/分支中的 identifier 自动关联 MR 与 Issue；仅在描述正文提及不会生效。
    - 都不可用时，输出 compare 链接并用 `CODING_RESULT: PR_PENDING_MANUAL` 标记。
 7. 用 §15 模板发评论回本 Issue。
 

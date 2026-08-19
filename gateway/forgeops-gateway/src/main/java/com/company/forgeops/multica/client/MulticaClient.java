@@ -1,8 +1,10 @@
 package com.company.forgeops.multica.client;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -12,6 +14,9 @@ import tools.jackson.databind.JsonNode;
 /**
  * Multica REST 客户端（Engineering Work / Agent Control Plane，§13）。
  * 鉴权：PAT Bearer Token；Gateway 只保存业务侧映射 forgeops_feedback.multica_issue_id。
+ *
+ * workspace/project 配置化：所有方法显式传 workspaceId（由 Project Registry 的
+ * multica.workspace 按名称解析，见 resolveWorkspaceId）；issue 可归属 multica project。
  */
 @Component
 public class MulticaClient {
@@ -20,6 +25,9 @@ public class MulticaClient {
 
     private final MulticaProperties properties;
     private final RestClient restClient;
+
+    /** workspace 名称/slug -> id 解析缓存（负结果缓存 60s，避免启动期反复打 API）。 */
+    private final Map<String, String> workspaceCache = new ConcurrentHashMap<>();
 
     public MulticaClient(MulticaProperties properties) {
         this.properties = properties;
@@ -43,32 +51,91 @@ public class MulticaClient {
     public record Comment(String id, String authorType, String authorId, String content, String createdAt) {
     }
 
-    public Issue createIssue(String title, String description, String assigneeId) {
+    // ---- workspace / project 解析 ----
+
+    /** 按名称或 slug 解析 workspace id；匹配不到时回退全局配置的 workspaceId。 */
+    public String resolveWorkspaceId(String workspaceNameOrSlug) {
+        if (workspaceNameOrSlug == null || workspaceNameOrSlug.isBlank()) {
+            return properties.workspaceId();
+        }
+        return workspaceCache.computeIfAbsent(workspaceNameOrSlug, name -> {
+            try {
+                JsonNode response = restClient.get().uri("/api/workspaces").retrieve().body(JsonNode.class);
+                if (response != null && response.isArray()) {
+                    for (JsonNode ws : response) {
+                        if (name.equals(ws.path("name").asText()) || name.equals(ws.path("slug").asText())) {
+                            String id = ws.path("id").asText();
+                            log.info("Multica workspace '{}' -> {}", name, id);
+                            return id;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("解析 multica workspace '{}' 失败，回退全局配置: {}", name, e.getMessage());
+            }
+            return properties.workspaceId();
+        });
+    }
+
+    /** 按标题解析 workspace 内 project id（未配置/未找到返回 null，issue 不归属 project）。 */
+    public String resolveProjectId(String workspaceId, String projectTitle) {
+        if (workspaceId == null || projectTitle == null || projectTitle.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode response = restClient.get()
+                    .uri(uri -> uri.path("/api/workspaces/{ws}/projects").build(workspaceId))
+                    .retrieve()
+                    .body(JsonNode.class);
+            JsonNode projects = response == null ? null
+                    : response.isArray() ? response : response.path("projects");
+            if (projects != null && projects.isArray()) {
+                for (JsonNode p : projects) {
+                    if (projectTitle.equals(p.path("title").asText())
+                            || projectTitle.equals(p.path("name").asText())) {
+                        String id = p.path("id").asText();
+                        log.info("Multica project '{}' @{} -> {}", projectTitle, workspaceId, id);
+                        return id;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("解析 multica project '{}' 失败（issue 将不归属 project）: {}", projectTitle, e.getMessage());
+        }
+        return null;
+    }
+
+    // ---- issue / comment ----
+
+    public Issue createIssue(String workspaceId, String projectId, String title, String description, String assigneeId) {
         Map<String, Object> body = new HashMap<>();
         body.put("title", title);
         body.put("description", description);
         body.put("status", "todo");
+        if (projectId != null) {
+            body.put("project_id", projectId);
+        }
         if (assigneeId != null) {
             body.put("assignee_type", "agent");
             body.put("assignee_id", assigneeId);
         }
         JsonNode response = restClient.post()
-                .uri(uri -> uri.path("/api/issues").queryParam("workspace_id", properties.workspaceId()).build())
+                .uri(uri -> uri.path("/api/issues").queryParam("workspace_id", workspaceId).build())
                 .body(body)
                 .retrieve()
                 .body(JsonNode.class);
         return toIssue(response);
     }
 
-    public Issue getIssue(String issueId) {
+    public Issue getIssue(String workspaceId, String issueId) {
         JsonNode response = restClient.get()
-                .uri(uri -> uri.path("/api/issues/{id}").queryParam("workspace_id", properties.workspaceId()).build(issueId))
+                .uri(uri -> uri.path("/api/issues/{id}").queryParam("workspace_id", workspaceId).build(issueId))
                 .retrieve()
                 .body(JsonNode.class);
         return toIssue(response);
     }
 
-    public Issue updateIssue(String issueId, String status, String assigneeId) {
+    public Issue updateIssue(String workspaceId, String issueId, String status, String assigneeId) {
         Map<String, Object> body = new HashMap<>();
         if (status != null) body.put("status", status);
         if (assigneeId != null) {
@@ -76,16 +143,16 @@ public class MulticaClient {
             body.put("assignee_id", assigneeId);
         }
         JsonNode response = restClient.put()
-                .uri(uri -> uri.path("/api/issues/{id}").queryParam("workspace_id", properties.workspaceId()).build(issueId))
+                .uri(uri -> uri.path("/api/issues/{id}").queryParam("workspace_id", workspaceId).build(issueId))
                 .body(body)
                 .retrieve()
                 .body(JsonNode.class);
         return toIssue(response);
     }
 
-    public Comment addComment(String issueId, String content) {
+    public Comment addComment(String workspaceId, String issueId, String content) {
         JsonNode response = restClient.post()
-                .uri(uri -> uri.path("/api/issues/{id}/comments").queryParam("workspace_id", properties.workspaceId()).build(issueId))
+                .uri(uri -> uri.path("/api/issues/{id}/comments").queryParam("workspace_id", workspaceId).build(issueId))
                 .body(Map.of("content", content))
                 .retrieve()
                 .body(JsonNode.class);
@@ -97,9 +164,9 @@ public class MulticaClient {
                 response.path("created_at").asText());
     }
 
-    public List<Comment> listComments(String issueId) {
+    public List<Comment> listComments(String workspaceId, String issueId) {
         JsonNode response = restClient.get()
-                .uri(uri -> uri.path("/api/issues/{id}/comments").queryParam("workspace_id", properties.workspaceId()).build(issueId))
+                .uri(uri -> uri.path("/api/issues/{id}/comments").queryParam("workspace_id", workspaceId).build(issueId))
                 .retrieve()
                 .body(JsonNode.class);
         if (response == null || !response.isArray()) return List.of();
@@ -115,10 +182,10 @@ public class MulticaClient {
         return comments;
     }
 
-    /** 按名称解析 Agent ID（workspace 内）。 */
-    public String findAgentIdByName(String agentName) {
+    /** 按名称解析 Agent ID（指定 workspace 内）。 */
+    public String findAgentIdByName(String workspaceId, String agentName) {
         JsonNode response = restClient.get()
-                .uri(uri -> uri.path("/api/agents").queryParam("workspace_id", properties.workspaceId()).build())
+                .uri(uri -> uri.path("/api/agents").queryParam("workspace_id", workspaceId).build())
                 .retrieve()
                 .body(JsonNode.class);
         if (response == null) return null;

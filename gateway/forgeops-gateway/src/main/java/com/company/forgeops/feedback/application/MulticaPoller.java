@@ -70,22 +70,24 @@ public class MulticaPoller {
 
     @Transactional
     protected void process(Feedback feedback) {
-        List<MulticaClient.Comment> comments = multicaClient.listComments(feedback.getMulticaIssueId());
+        ProjectConfig project = registry.find(feedback.getProjectId()).orElse(null);
+        String workspaceId = multicaClient.resolveWorkspaceId(
+                project == null || project.multica() == null ? null : project.multica().workspace());
+        List<MulticaClient.Comment> comments = multicaClient.listComments(workspaceId, feedback.getMulticaIssueId());
         Optional<MulticaClient.Comment> latestTriage = lastMarker(comments, MARKER_TRIAGE);
         Optional<MulticaClient.Comment> latestCoding = lastMarker(comments, MARKER_CODING);
-        log.info("轮询 {} status={} comments={} triageMarker={} codingMarker={}",
-                feedback.identifier(), feedback.getStatus(), comments.size(),
+        log.info("轮询 {} status={} workspace={} comments={} triageMarker={} codingMarker={}",
+                feedback.identifier(), feedback.getStatus(), workspaceId, comments.size(),
                 latestTriage.isPresent(), latestCoding.isPresent());
 
         if (feedback.getStatus() == FeedbackStatus.TRIAGING && latestTriage.isPresent()) {
-            handleTriageResult(feedback, latestTriage.get());
+            handleTriageResult(feedback, project, workspaceId, latestTriage.get());
         } else if (feedback.getStatus() == FeedbackStatus.CODING && latestCoding.isPresent()) {
-            handleCodingResult(feedback, latestCoding.get());
+            handleCodingResult(feedback, workspaceId, latestCoding.get());
         }
     }
 
-    private void handleTriageResult(Feedback feedback, MulticaClient.Comment comment) {
-        ProjectConfig project = registry.find(feedback.getProjectId()).orElse(null);
+    private void handleTriageResult(Feedback feedback, ProjectConfig project, String workspaceId, MulticaClient.Comment comment) {
         String content = comment.content();
         if (project == null) return;
 
@@ -93,9 +95,9 @@ public class MulticaPoller {
             if (project.policyFlag("autoCode", true)) {
                 feedbackService.transition(feedback, FeedbackStatus.CODING, "Triage 判定可自动修复");
                 String codingAgentId = project.multica() == null ? null
-                        : multicaClient.findAgentIdByName(project.multica().codingAgent());
-                multicaClient.updateIssue(feedback.getMulticaIssueId(), "todo", codingAgentId);
-                multicaClient.addComment(feedback.getMulticaIssueId(),
+                        : multicaClient.findAgentIdByName(workspaceId, project.multica().codingAgent());
+                multicaClient.updateIssue(workspaceId, feedback.getMulticaIssueId(), "todo", codingAgentId);
+                multicaClient.addComment(workspaceId, feedback.getMulticaIssueId(),
                         "Triage 完成，已转交 Coding Agent（" + project.multica().codingAgent() + "）。请按 Coding Skill 处理。");
                 audit.record(feedback.getId(), comment.authorId(), "TRIAGE_DONE", "proceed to coding");
             }
@@ -106,14 +108,14 @@ public class MulticaPoller {
         }
     }
 
-    private void handleCodingResult(Feedback feedback, MulticaClient.Comment comment) {
+    private void handleCodingResult(Feedback feedback, String workspaceId, MulticaClient.Comment comment) {
         String content = comment.content();
         if (content.contains(MARKER_CODING + " PR_CREATED")) {
             Matcher matcher = PR_URL_PATTERN.matcher(content);
             if (matcher.find()) {
                 feedback.setPrUrl(matcher.group(1));
                 feedbackService.transition(feedback, FeedbackStatus.PR_REVIEW, "Draft PR 已创建，等待人工 Review");
-                multicaClient.addComment(feedback.getMulticaIssueId(),
+                multicaClient.addComment(workspaceId, feedback.getMulticaIssueId(),
                         "Draft PR 已创建：" + matcher.group(1) + " 。等待开发人员人工 Review（Human Gate：禁止 Agent 合并）。");
                 audit.record(feedback.getId(), comment.authorId(), "DRAFT_PR_CREATED", matcher.group(1));
             }

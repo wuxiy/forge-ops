@@ -26,7 +26,8 @@ class CallbackIdempotencyTest {
         when(repo.findBySourceAndExternalEventId(eq("GIT"), eq("evt-001")))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(new IntegrationEvent()));
-        CallbackService service = new CallbackService(repo, null, null, null, new HumanGate(), null);
+        CallbackService service = new CallbackService(repo, null, null, null, new HumanGate(), null,
+                mock(com.company.forgeops.project.registry.ProjectRegistryService.class));
 
         CallbackService.CallbackPayload payload = new CallbackService.CallbackPayload(
                 "demo-app", null, "evt-001", "wuxi", "USER", "PING", null, null, null, null, null, null);
@@ -53,7 +54,8 @@ class CallbackIdempotencyTest {
     void gitCallbackWithAgentMergeActorIsRejected() {
         IntegrationEventRepository repo = mock(IntegrationEventRepository.class);
         when(repo.findBySourceAndExternalEventId(any(), any())).thenReturn(Optional.empty());
-        CallbackService service = new CallbackService(repo, null, null, null, new HumanGate(), null);
+        CallbackService service = new CallbackService(repo, null, null, null, new HumanGate(), null,
+                mock(com.company.forgeops.project.registry.ProjectRegistryService.class));
 
         CallbackService.CallbackPayload payload = new CallbackService.CallbackPayload(
                 "demo-app", null, "evt-002", "forgeops-coding", "AGENT", "PR_MERGED", null, null, null, null, null, null);
