@@ -18,7 +18,7 @@ pnpm add @forgeops/feedback-vue
 import { createForgeOps } from '@forgeops/feedback-vue'
 
 const forgeops = createForgeOps({
-  gatewayUrl: 'http://<gateway-host>:18090',   // ForgeOps Gateway
+  gatewayUrl: 'http://<gateway-host>:18092',   // ForgeOps Gateway
   projectId: '<project-id>',                  // 与 registry/projects/<id>.yaml 一致
   environment: 'test',                        // test/uat/staging，其他环境自动禁用
   getReporter: () => ({ id: user.id, name: user.name }),  // 接宿主登录态（可选，否则表单填写）
