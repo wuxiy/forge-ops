@@ -13,12 +13,12 @@
 ## 工作步骤
 
 1. 读 Issue 正文 Context Pack + Triage 分析评论（根因/相关文件/建议方案/Acceptance Criteria）。
-2. 准备工作目录：clone 或 fetch 目标 repo（用 SSH remote），从 defaultBranch 切出 `feature/agent/FB-xxxx`。
+2. 准备工作目录：clone 或 fetch 目标 repo（用 SSH remote），从 defaultBranch 切出 `feature/agent/<反馈完整标识>`。
 3. 按 Triage 方案修改代码；同步新增/更新对应测试（测试必须覆盖 Acceptance Criteria 的每一条）。
 4. 执行项目测试并通过：
    - 后端（Java）：在对应模块目录 `mvn -q test`
    - 前端（TS/Vue）：在对应模块目录 `pnpm typecheck`（有单测则一并运行）
-5. commit（信息格式：`fix(FB-xxxx): <概要>`），push 分支。
+5. commit（信息格式：`fix(<反馈标识>): <概要>`），push 分支。
 6. 创建 **Draft PR/MR**（base = defaultBranch），按 git.repoProvider 选择：
    - **github**：优先 `gh pr create --draft`；或用环境变量 `FORGEOPS_GITHUB_TOKEN` 调 GitHub API `POST /repos/{repo}/pulls`（`"draft": true`）。
    - **gitlab**：用环境变量 `FORGEOPS_GITLAB_TOKEN` / `FORGEOPS_GITLAB_URL` / `FORGEOPS_GITLAB_PROJECT` 调 GitLab API：
@@ -48,7 +48,7 @@
 <可能影响的范围与回归点>
 
 ## 来源
-Feedback: FB-xxxx
+Feedback: <反馈标识>
 Multica Issue: <identifier>
 
 PR_URL: https://github.com/<repo>/pull/<n>

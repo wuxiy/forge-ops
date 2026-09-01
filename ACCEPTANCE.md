@@ -57,7 +57,7 @@
 | # | 结果 | 证据 |
 |---|---|---|
 | E1 | ✅ | monorepo 结构与 §21 一致（gateway/sdk/examples/registry/schemas/multica/policy/deploy/docs） |
-| E2 | ✅ | `deploy/docker-compose/forgeops.yml` + `forgeops.env.example` + gateway Dockerfile + `deploy/nginx/forgeops-gateway.conf`（:18090）交付 |
+| E2 | ✅ | `deploy/docker-compose/forgeops.yml` + `forgeops.env.example` + gateway Dockerfile + `deploy/nginx/forgeops-gateway.conf`（:18090；2026-08-19 起对外端口调整为 :18092）交付 |
 | E3 | ✅ | docs/integration-guide.md：SDK 5 步接入 / Request-ID 链路 / 三回调契约（含 payload 示例） |
 | E4 | ✅ | Gateway `mvn verify`：13 tests，BUILD SUCCESS（sanitizer/状态机/幂等/HumanGate/ContextPack） |
 | E5 | ✅ | autoMerge/autoDeploy 硬编码 false（HumanGate）；AGENT merge 回调实测被拒；Agent 仅持 forge-ops 仓库访问（SSH key） |

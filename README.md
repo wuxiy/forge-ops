@@ -13,9 +13,11 @@
 ```
 forgeops/
 ├── gateway/forgeops-gateway/   # ForgeOps Gateway（Spring Boot 4 + PostgreSQL）
-├── sdk/forgeops-feedback-vue/  # ForgeOps Feedback SDK（Vue 3 插件）
-├── examples/demo-app/          # 试点：Vue + Spring Boot（含预埋 Bug）
+├── sdk/                        # Feedback SDK（core/dom + Vue3/Vue2/React 薄壳）+ Spring Boot Starter + Fastify 插件
+├── examples/demo-app/          # 试点：Vue3 / Vue2 / React + Spring Boot（含预埋 Bug）
 │   ├── web/
+│   ├── vue2-demo/
+│   ├── react-demo/
 │   └── api/
 ├── registry/projects/          # Project Registry（新项目接入 = 加一份 YAML）
 ├── schemas/                    # feedback / context-pack JSON Schema
@@ -46,7 +48,7 @@ FORGEOPS_MULTICA_TOKEN=mul_xxx FORGEOPS_MULTICA_WORKSPACE_ID=<uuid> mvn spring-b
 
 ```
 反馈(SDK) → Gateway(Intake/ContextPack/PII) → Multica Issue(Triage Agent)
-  → Coding Agent(feature/agent/FB-xxxx 分支+测试+Draft PR)
+  → Coding Agent(feature/agent/<反馈标识> 分支+测试+Draft PR)
   → 人工 Review/Merge → CI(git/ci/deployment 回调) → 测试环境发布
   → 原反馈人验证(通过=Done / 仍有问题=Reopen 原 Issue)
 ```

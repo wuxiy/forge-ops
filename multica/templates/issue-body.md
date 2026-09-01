@@ -38,4 +38,4 @@ service=<service> requestId=<id>
 
 ---
 
-来源反馈: FB-xxxx
+来源反馈: <反馈完整标识>
