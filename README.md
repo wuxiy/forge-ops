@@ -4,9 +4,11 @@
 
 打通「测试/产品反馈 → AI 分析/修复 → PR → 人工 Review → 构建发布 → 原反馈人验证 → 闭环」。
 
-- 架构方案：[forgeops-architecture-v0.1.md](./forgeops-architecture-v0.1.md)
-- 验收清单与验收记录：[ACCEPTANCE.md](./ACCEPTANCE.md)
-- 接入指南：[docs/integration-guide.md](./docs/integration-guide.md)
+- V0.1 架构（历史实现）：[forgeops-architecture-v0.1.md](./forgeops-architecture-v0.1.md)
+- V0.1 验收（历史记录）：[ACCEPTANCE.md](./ACCEPTANCE.md)
+- V0.1 接入指南：[docs/integration-guide.md](./docs/integration-guide.md)
+- 2.0 实施计划（待实施）：[docs/forgeops-2.0-implementation-plan.md](./docs/forgeops-2.0-implementation-plan.md)
+- 2.0 验收清单（待执行）：[docs/forgeops-2.0-acceptance-checklist.md](./docs/forgeops-2.0-acceptance-checklist.md)
 
 ## 仓库结构（§21）
 
