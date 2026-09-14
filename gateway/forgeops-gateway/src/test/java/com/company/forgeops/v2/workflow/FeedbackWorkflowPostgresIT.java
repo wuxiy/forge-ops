@@ -22,7 +22,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * Invoked explicitly against a fresh PostgreSQL database. It is intentionally named IT so
  * ordinary unit-test runs cannot accidentally use a configured non-test datasource.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
+        properties = "forgeops.v2.security.token-secret=integration-test-security-secret")
 class FeedbackWorkflowPostgresIT {
 
     @Autowired

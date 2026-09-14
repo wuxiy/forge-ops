@@ -27,7 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /** Explicitly run against a disposable PostgreSQL database; never included in a default unit-test run. */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
+        properties = "forgeops.v2.security.token-secret=integration-test-security-secret")
 class IntegrationReliabilityPostgresIT {
 
     @Autowired
