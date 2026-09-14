@@ -20,7 +20,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 /** Explicit localhost HTTP test against a disposable PostgreSQL database. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {"forgeops.v2.security.token-secret=integration-test-security-secret",
-                "forgeops.v2.registry.path=src/test/resources/v2-registry", "forgeops.v2.registry.workspace-root=."})
+                "forgeops.v2.registry.path=src/test/resources/v2-registry", "forgeops.v2.registry.workspace-root=.",
+                "forgeops.v2.runtime.base-url=http://127.0.0.1:17678", "forgeops.v2.runtime.service-token=integration-runtime-token"})
 class FeedbackSecurityPostgresIT {
 
     private static final String PROJECT_A = "security-project-a";

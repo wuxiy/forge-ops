@@ -24,7 +24,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
         properties = {"forgeops.v2.security.token-secret=integration-test-security-secret",
-                "forgeops.v2.registry.path=src/test/resources/v2-registry", "forgeops.v2.registry.workspace-root=."})
+                "forgeops.v2.registry.path=src/test/resources/v2-registry", "forgeops.v2.registry.workspace-root=.",
+                "forgeops.v2.runtime.base-url=http://127.0.0.1:17678", "forgeops.v2.runtime.service-token=integration-runtime-token"})
 class FeedbackWorkflowPostgresIT {
 
     @Autowired
@@ -45,8 +46,8 @@ class FeedbackWorkflowPostgresIT {
         var feedback = workflow.submit(new SubmitFeedbackCommand(projectId, "subject-a", "The task", "It fails",
                 "{\"safe\":true}", "a".repeat(64), 0, "it-trace-1"));
         UUID firstCycleId = feedback.getCurrentCycleId();
-        assertEquals(FeedbackState.CONTEXT_READY, feedback.getState());
-        assertEquals(FeedbackState.CONTEXT_READY, feedbacks.findById(feedback.getId()).orElseThrow().getState());
+        assertEquals(FeedbackState.TRIAGE_QUEUED, feedback.getState());
+        assertEquals(FeedbackState.TRIAGE_QUEUED, feedbacks.findById(feedback.getId()).orElseThrow().getState());
 
         feedback = advanceToWaitingVerify(feedback, "it-first");
         feedback = workflow.reopen(feedback.getId(), "subject-a", "Still failing", "{\"safe\":true}", "b".repeat(64), 0,
@@ -56,7 +57,7 @@ class FeedbackWorkflowPostgresIT {
         feedback = workflow.reopen(feedback.getId(), "subject-a", "Still failing again", "{\"safe\":true}", "c".repeat(64),
                 0, "it-reopen-2");
 
-        assertEquals(FeedbackState.CONTEXT_READY, feedback.getState());
+        assertEquals(FeedbackState.TRIAGE_QUEUED, feedback.getState());
         assertNotEquals(firstCycleId, feedback.getCurrentCycleId());
         assertEquals(3, cycles.findMaxCycleNo(feedback.getId()));
         assertEquals(1, cycles.findByFeedbackIdAndCycleNo(feedback.getId(), 1).orElseThrow().getCycleNo());
@@ -99,13 +100,12 @@ class FeedbackWorkflowPostgresIT {
 
     private com.company.forgeops.v2.feedback.domain.Feedback advanceToWaitingVerify(
             com.company.forgeops.v2.feedback.domain.Feedback feedback, String tracePrefix) {
-        feedback = workflow.transition(feedback.getId(), FeedbackState.TRIAGE_QUEUED, "system", tracePrefix + "-1");
-        feedback = workflow.transition(feedback.getId(), FeedbackState.TRIAGE_RUNNING, "system", tracePrefix + "-2");
-        feedback = workflow.transition(feedback.getId(), FeedbackState.CODE_QUEUED, "system", tracePrefix + "-3");
-        feedback = workflow.transition(feedback.getId(), FeedbackState.CODE_RUNNING, "system", tracePrefix + "-4");
-        feedback = workflow.transition(feedback.getId(), FeedbackState.PR_READY, "system", tracePrefix + "-5");
-        feedback = workflow.transition(feedback.getId(), FeedbackState.BUILD_RUNNING, "system", tracePrefix + "-6");
-        feedback = workflow.transition(feedback.getId(), FeedbackState.DEPLOY_RUNNING, "system", tracePrefix + "-7");
-        return workflow.transition(feedback.getId(), FeedbackState.WAITING_VERIFY, "system", tracePrefix + "-8");
+        feedback = workflow.transition(feedback.getId(), FeedbackState.TRIAGE_RUNNING, "system", tracePrefix + "-1");
+        feedback = workflow.transition(feedback.getId(), FeedbackState.CODE_QUEUED, "system", tracePrefix + "-2");
+        feedback = workflow.transition(feedback.getId(), FeedbackState.CODE_RUNNING, "system", tracePrefix + "-3");
+        feedback = workflow.transition(feedback.getId(), FeedbackState.PR_READY, "system", tracePrefix + "-4");
+        feedback = workflow.transition(feedback.getId(), FeedbackState.BUILD_RUNNING, "system", tracePrefix + "-5");
+        feedback = workflow.transition(feedback.getId(), FeedbackState.DEPLOY_RUNNING, "system", tracePrefix + "-6");
+        return workflow.transition(feedback.getId(), FeedbackState.WAITING_VERIFY, "system", tracePrefix + "-7");
     }
 }

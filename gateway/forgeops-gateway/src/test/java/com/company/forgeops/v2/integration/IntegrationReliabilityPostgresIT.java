@@ -14,6 +14,7 @@ import com.company.forgeops.v2.integration.inbox.InboxReceipt;
 import com.company.forgeops.v2.integration.inbox.IntegrationInbox;
 import com.company.forgeops.v2.integration.outbox.OutboxDispatcher;
 import com.company.forgeops.v2.feedback.domain.FeedbackRepository;
+import com.company.forgeops.v2.agent.domain.AgentRunRepository;
 import com.company.forgeops.v2.workflow.FeedbackWorkflow;
 import com.company.forgeops.v2.workflow.SubmitFeedbackCommand;
 import java.util.ArrayList;
@@ -29,7 +30,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 /** Explicitly run against a disposable PostgreSQL database; never included in a default unit-test run. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
         properties = {"forgeops.v2.security.token-secret=integration-test-security-secret",
-                "forgeops.v2.registry.path=src/test/resources/v2-registry", "forgeops.v2.registry.workspace-root=."})
+                "forgeops.v2.registry.path=src/test/resources/v2-registry", "forgeops.v2.registry.workspace-root=.",
+                "forgeops.v2.runtime.base-url=http://127.0.0.1:17678", "forgeops.v2.runtime.service-token=integration-runtime-token"})
 class IntegrationReliabilityPostgresIT {
 
     @Autowired
@@ -49,6 +51,9 @@ class IntegrationReliabilityPostgresIT {
 
     @Autowired
     private FeedbackRepository feedbacks;
+
+    @Autowired
+    private AgentRunRepository agentRuns;
 
     @Test
     void missingExternalEventIdIsRejectedAndRepeatedEventIsOneDurableFact() throws Exception {
@@ -86,8 +91,9 @@ class IntegrationReliabilityPostgresIT {
                 "{\"safe\":true}", "e".repeat(64), 0, "outbox-trace"));
 
         assertEquals(before + 1, outboxEvents.count());
+        var run = agentRuns.findByFeedbackId(feedback.getId()).stream().findFirst().orElseThrow();
         var outbox = outboxEvents.findAll().stream()
-                .filter(event -> event.getAggregateId().equals(feedback.getId()))
+                .filter(event -> event.getAggregateId().equals(run.getId()))
                 .findFirst().orElseThrow();
         assertTrue(outboxDispatcher.dispatch(outbox.getId()));
         outbox = outboxEvents.findById(outbox.getId()).orElseThrow();

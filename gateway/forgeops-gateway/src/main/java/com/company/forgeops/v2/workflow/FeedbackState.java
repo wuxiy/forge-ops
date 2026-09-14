@@ -31,12 +31,12 @@ public enum FeedbackState {
         var result = new EnumMap<FeedbackState, Set<FeedbackState>>(FeedbackState.class);
         result.put(RECEIVED, EnumSet.of(CONTEXT_READY));
         result.put(CONTEXT_READY, EnumSet.of(TRIAGE_QUEUED));
-        result.put(TRIAGE_QUEUED, EnumSet.of(TRIAGE_RUNNING));
+        result.put(TRIAGE_QUEUED, EnumSet.of(TRIAGE_RUNNING, TRIAGE_FAILED));
         result.put(TRIAGE_RUNNING, EnumSet.of(NEEDS_INPUT, NO_CODE_REQUIRED, TRIAGE_FAILED, CODE_QUEUED));
         result.put(NEEDS_INPUT, EnumSet.of(CONTEXT_READY, TRIAGE_QUEUED));
         result.put(NO_CODE_REQUIRED, EnumSet.of(WAITING_VERIFY, REOPENED));
         result.put(TRIAGE_FAILED, EnumSet.of(TRIAGE_QUEUED));
-        result.put(CODE_QUEUED, EnumSet.of(CODE_RUNNING));
+        result.put(CODE_QUEUED, EnumSet.of(CODE_RUNNING, EXECUTION_FAILED));
         result.put(CODE_RUNNING, EnumSet.of(EXECUTION_FAILED, PR_READY));
         result.put(EXECUTION_FAILED, EnumSet.of(CODE_QUEUED));
         result.put(PR_READY, EnumSet.of(BUILD_RUNNING));

@@ -1,6 +1,11 @@
 package com.company.forgeops.v2.workflow;
 
 import com.company.forgeops.v2.audit.AuditTrail;
+import com.company.forgeops.v2.agent.domain.AgentRole;
+import com.company.forgeops.v2.agent.domain.AgentRun;
+import com.company.forgeops.v2.agent.domain.AgentRunRepository;
+import com.company.forgeops.v2.agent.domain.AgentRunState;
+import com.company.forgeops.v2.agent.execution.AgentContracts.TriageDecision;
 import com.company.forgeops.v2.feedback.domain.ContextSnapshot;
 import com.company.forgeops.v2.feedback.domain.ContextSnapshotRepository;
 import com.company.forgeops.v2.feedback.domain.Feedback;
@@ -31,16 +36,18 @@ public class FeedbackWorkflow {
     private final ContextSnapshotRepository snapshots;
     private final ProjectFeedbackCounterRepository counters;
     private final OutboxEventRepository outboxEvents;
+    private final AgentRunRepository agentRuns;
     private final AuditTrail auditTrail;
 
     public FeedbackWorkflow(FeedbackRepository feedbacks, FeedbackCycleRepository cycles,
             ContextSnapshotRepository snapshots, ProjectFeedbackCounterRepository counters, OutboxEventRepository outboxEvents,
-            AuditTrail auditTrail) {
+            AgentRunRepository agentRuns, AuditTrail auditTrail) {
         this.feedbacks = feedbacks;
         this.cycles = cycles;
         this.snapshots = snapshots;
         this.counters = counters;
         this.outboxEvents = outboxEvents;
+        this.agentRuns = agentRuns;
         this.auditTrail = auditTrail;
     }
 
@@ -58,7 +65,7 @@ public class FeedbackWorkflow {
         snapshots.save(ContextSnapshot.create(feedback.getId(), cycle.getId(), CONTEXT_SCHEMA_VERSION, command.contextSha256(),
                 command.redactionCount(), command.redactedContextJson()));
         feedback.transitionTo(FeedbackState.CONTEXT_READY);
-        enqueue(feedback, "FEEDBACK_SUBMITTED");
+        queueTriage(feedback, command.traceId());
         auditTrail.record(feedback.getId(), cycle.getId(), null, command.reporterSubject(), "FEEDBACK_SUBMITTED", "SUCCESS",
                 command.traceId(), "{\"displayNo\":" + displayNo + "}");
         return feedback;
@@ -69,7 +76,6 @@ public class FeedbackWorkflow {
         Feedback feedback = get(feedbackId);
         FeedbackState before = feedback.getState();
         feedback.transitionTo(target);
-        enqueue(feedback, "WORKFLOW_STATE_CHANGED");
         auditTrail.record(feedbackId, feedback.getCurrentCycleId(), null, actor, "STATE_TRANSITION", "SUCCESS", traceId,
                 "{\"from\":\"" + before + "\",\"to\":\"" + target + "\"}");
         return feedback;
@@ -87,7 +93,7 @@ public class FeedbackWorkflow {
         snapshots.save(ContextSnapshot.create(feedbackId, nextCycle.getId(), CONTEXT_SCHEMA_VERSION, contextSha256,
                 redactionCount, redactedContextJson));
         feedback.transitionTo(FeedbackState.CONTEXT_READY);
-        enqueue(feedback, "FEEDBACK_REOPENED");
+        queueTriage(feedback, traceId);
         auditTrail.record(feedbackId, nextCycle.getId(), null, actor, "FEEDBACK_REOPENED", "SUCCESS", traceId,
                 "{\"cycleNo\":" + nextCycleNo + "}");
         return feedback;
@@ -109,12 +115,88 @@ public class FeedbackWorkflow {
         }
     }
 
-    private void enqueue(Feedback feedback, String eventType) {
-        String idempotencyKey = feedback.getId() + "/" + feedback.getCurrentCycleId() + "/" + feedback.getVersion()
-                + "/" + eventType + "/" + feedback.getState();
-        String payload = "{\"feedbackId\":\"" + feedback.getId() + "\",\"cycleId\":\""
-                + feedback.getCurrentCycleId() + "\",\"state\":\"" + feedback.getState() + "\"}";
-        outboxEvents.save(OutboxEvent.pending("FEEDBACK", feedback.getId(), eventType, idempotencyKey, payload));
+    @Transactional
+    public void recordRuntimeSubmission(UUID agentRunId, String providerRunId, String traceId) {
+        AgentRun run = agentRuns.findById(agentRunId)
+                .orElseThrow(() -> new IllegalArgumentException("Agent run does not exist: " + agentRunId));
+        if (run.getState() == AgentRunState.RUNNING) {
+            if (!providerRunId.equals(run.getProviderRunId())) {
+                throw new WorkflowConflictException("Agent run provider id changed for " + agentRunId);
+            }
+            return;
+        }
+        if (run.getState() != AgentRunState.QUEUED) {
+            throw new WorkflowConflictException("Agent run is not queueable: " + run.getState());
+        }
+        Feedback feedback = get(run.getFeedbackId());
+        FeedbackState expected = run.getRole() == AgentRole.TRIAGE ? FeedbackState.TRIAGE_QUEUED : FeedbackState.CODE_QUEUED;
+        FeedbackState target = run.getRole() == AgentRole.TRIAGE ? FeedbackState.TRIAGE_RUNNING : FeedbackState.CODE_RUNNING;
+        if (feedback.getState() != expected) {
+            throw new WorkflowConflictException("Feedback is not ready for agent run: " + feedback.getState());
+        }
+        run.markRunning(providerRunId);
+        feedback.transitionTo(target);
+        auditTrail.record(feedback.getId(), run.getCycleId(), run.getId(), "runtime", "AGENT_SUBMITTED", "SUCCESS", traceId,
+                "{\"role\":\"" + run.getRole() + "\"}");
+    }
+
+    @Transactional
+    public void recordRuntimeFailure(UUID agentRunId, AgentRunState state, String category, String traceId) {
+        AgentRun run = agentRuns.findById(agentRunId)
+                .orElseThrow(() -> new IllegalArgumentException("Agent run does not exist: " + agentRunId));
+        if (run.getState() == AgentRunState.SUCCEEDED || run.getState() == AgentRunState.FAILED
+                || run.getState() == AgentRunState.INVALID_OUTPUT || run.getState() == AgentRunState.CANCELLED
+                || run.getState() == AgentRunState.TIMED_OUT) {
+            return;
+        }
+        Feedback feedback = get(run.getFeedbackId());
+        FeedbackState target = run.getRole() == AgentRole.TRIAGE ? FeedbackState.TRIAGE_FAILED : FeedbackState.EXECUTION_FAILED;
+        run.fail(state, category, "Runtime reported " + state);
+        feedback.transitionTo(target);
+        auditTrail.record(feedback.getId(), run.getCycleId(), run.getId(), "runtime", "AGENT_TERMINAL", "FAILED", traceId,
+                "{\"state\":\"" + state + "\",\"category\":\"" + category + "\"}");
+    }
+
+    @Transactional
+    public void recordTriageSuccess(UUID agentRunId, TriageDecision decision, String resultJson, String traceId) {
+        AgentRun run = agentRuns.findById(agentRunId)
+                .orElseThrow(() -> new IllegalArgumentException("Agent run does not exist: " + agentRunId));
+        if (run.getRole() != AgentRole.TRIAGE || run.getState() != AgentRunState.RUNNING) {
+            throw new WorkflowConflictException("Triage result is not applicable to run " + agentRunId);
+        }
+        Feedback feedback = get(run.getFeedbackId());
+        if (feedback.getState() != FeedbackState.TRIAGE_RUNNING) {
+            throw new WorkflowConflictException("Feedback is not running triage: " + feedback.getState());
+        }
+        run.succeed(resultJson);
+        switch (decision) {
+            case NEEDS_INPUT -> feedback.transitionTo(FeedbackState.NEEDS_INPUT);
+            case NO_CODE_REQUIRED -> feedback.transitionTo(FeedbackState.NO_CODE_REQUIRED);
+            case CODING_REQUIRED -> {
+                feedback.transitionTo(FeedbackState.CODE_QUEUED);
+                queueCoding(feedback, traceId);
+            }
+        }
+        auditTrail.record(feedback.getId(), run.getCycleId(), run.getId(), "runtime", "TRIAGE_RESULT", "SUCCESS", traceId,
+                "{\"decision\":\"" + decision + "\"}");
+    }
+
+    private void queueTriage(Feedback feedback, String traceId) {
+        feedback.transitionTo(FeedbackState.TRIAGE_QUEUED);
+        enqueueAgent(feedback, AgentRole.TRIAGE, traceId);
+    }
+
+    private void queueCoding(Feedback feedback, String traceId) {
+        enqueueAgent(feedback, AgentRole.CODING, traceId);
+    }
+
+    private void enqueueAgent(Feedback feedback, AgentRole role, String traceId) {
+        AgentRun run = agentRuns.save(AgentRun.queue(feedback.getId(), feedback.getCurrentCycleId(), role, 1,
+                feedback.getId() + "/" + feedback.getCurrentCycleId() + "/" + role + "/1"));
+        String payload = "{\"agentRunId\":\"" + run.getId() + "\"}";
+        outboxEvents.save(OutboxEvent.pending("AGENT_RUN", run.getId(), "AGENT_RUN_REQUESTED", run.getIdempotencyKey(), payload));
+        auditTrail.record(feedback.getId(), run.getCycleId(), run.getId(), "system", "AGENT_QUEUED", "SUCCESS", traceId,
+                "{\"role\":\"" + role + "\"}");
     }
 
     private static void validate(SubmitFeedbackCommand command) {
