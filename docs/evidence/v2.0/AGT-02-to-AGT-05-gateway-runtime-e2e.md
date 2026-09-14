@@ -9,7 +9,7 @@
 2. Gateway 在同一数据库事务创建 Feedback、Cycle、Context Snapshot、`TRIAGE` AgentRun 和 `AGENT_RUN_REQUESTED` Outbox；
 3. Outbox 在事务外调用 Runtime；Runtime 创建真实 Paseo Agent 和独立 worktree；
 4. Paseo 返回符合 Triage Schema 的 JSON，Runtime 从 canonical timeline 合并输出片段；
-5. Gateway 只接受精确 `decision + summary` 结构，持久化 AgentRun 结果，并将 Feedback 转到 `NO_CODE_REQUIRED`；受保护 API 最终显示 `WAITING_VERIFY`。
+5. Gateway 只接受精确的八字段 Triage 结构（`decision`、`summary`、`rootCause`、`evidence[]`、`relatedFiles[]`、`missingInformation[]`、`risks[]`、`suggestedPlan[]`），持久化脱敏后的 AgentRun 结果，并将 Feedback 转到 `NO_CODE_REQUIRED`；受保护 API 最终显示 `WAITING_VERIFY`。
 
 观察结果：
 
@@ -18,7 +18,7 @@
 | AGT-02 | Gateway 只经 `AgentExecution` 的 submit/inspect/cancel 边界调用 Runtime；Paseo 类型未进入 Workflow | PASS（当前 Triage 主链） |
 | AGT-03 | 无浏览器 Token 为 401；Gateway→Runtime 使用独立服务 Token；Runtime 只绑定 loopback | PASS（本机拓扑） |
 | AGT-04 | Gateway 使用 AgentRun/Outbox Idempotency Key；Runtime 的 10 并发真实 Submit 已证明只创建一个 Provider Run | PASS（单 Runtime 实例） |
-| AGT-05（正向） | 真实 Triage 返回 `NO_CODE_REQUIRED` 与非空 summary，Gateway 解析后推进至 `NO_CODE_REQUIRED` | PASS（正向路径） |
+| AGT-05（正向） | 真实 Triage 返回完整八字段、`NO_CODE_REQUIRED`；Gateway 精确校验、脱敏并推进至 `NO_CODE_REQUIRED` | PASS（正向路径） |
 | AGT-10（局部） | 原临时仓库仍在 `main` 且工作区无改动；Paseo 的 Agent 在独立 worktree 运行 | PASS（单任务） |
 
 验证记录：
@@ -28,7 +28,7 @@
 - Runtime 类型检查与测试：2/2 通过；
 - Runtime 持久化文件只含 idempotency key、项目、角色、cwd、Provider Run、状态和时间戳；不含 Prompt、Context 或结果。
 - `AgentContractsTest` 额外验证：Triage 缺字段、额外字段、未知 decision 被拒绝；即使 Agent summary 返回邮箱或 Token 形态文本，Gateway 持久化前会脱敏。
-- 在加入严格解析与输出脱敏后，已重启最新 Gateway/Runtime 并重复同一真实链路；数据库最终为 `NO_CODE_REQUIRED | TRIAGE | SUCCEEDED | DELIVERED`，受保护 API 返回 `WAITING_VERIFY`。
+- 在完整八字段契约与输出脱敏均生效后，已重启最新 Gateway/Runtime 并再次执行真实链路（Feedback `7222274a-c9a2-4506-af8b-80cbcbabd579`）；数据库最终为 `NO_CODE_REQUIRED | TRIAGE | SUCCEEDED | DELIVERED`，`result_json` 含精确八字段，受保护 API 返回 `WAITING_VERIFY`。
 
 未签收：
 
