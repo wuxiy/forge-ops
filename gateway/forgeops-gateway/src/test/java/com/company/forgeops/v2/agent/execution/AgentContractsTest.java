@@ -11,7 +11,7 @@ class AgentContractsTest {
     @Test
     void acceptsOnlyExactTriageShapeAndRedactsItsPersistedSummary() throws Exception {
         var parsed = AgentContracts.parseTriage(JsonMapper.shared(),
-                "{\"decision\":\"NO_CODE_REQUIRED\",\"summary\":\"email a@example.com token=abc\"}");
+                "{\"decision\":\"NO_CODE_REQUIRED\",\"summary\":\"email a@example.com token=abc\",\"rootCause\":\"not a code issue\",\"evidence\":[\"route /probe\"],\"relatedFiles\":[],\"missingInformation\":[],\"risks\":[],\"suggestedPlan\":[]}");
 
         assertEquals(AgentContracts.TriageDecision.NO_CODE_REQUIRED, parsed.decision());
         assertEquals("email [REDACTED] token=[REDACTED]", parsed.summary());
@@ -26,8 +26,8 @@ class AgentContractsTest {
                 () -> AgentContracts.parseTriage(JsonMapper.shared(), "{\"decision\":\"NO_CODE_REQUIRED\"}"));
         assertThrows(IllegalArgumentException.class,
                 () -> AgentContracts.parseTriage(JsonMapper.shared(),
-                        "{\"decision\":\"NO_CODE_REQUIRED\",\"summary\":\"ok\",\"extra\":true}"));
+                        "{\"decision\":\"NO_CODE_REQUIRED\",\"summary\":\"ok\",\"rootCause\":\"x\",\"evidence\":[],\"relatedFiles\":[],\"missingInformation\":[],\"risks\":[],\"suggestedPlan\":[],\"extra\":true}"));
         assertThrows(IllegalArgumentException.class,
-                () -> AgentContracts.parseTriage(JsonMapper.shared(), "{\"decision\":\"APPROVE\",\"summary\":\"ok\"}"));
+                () -> AgentContracts.parseTriage(JsonMapper.shared(), "{\"decision\":\"APPROVE\",\"summary\":\"ok\",\"rootCause\":\"x\",\"evidence\":[],\"relatedFiles\":[],\"missingInformation\":[],\"risks\":[],\"suggestedPlan\":[]}"));
     }
 }

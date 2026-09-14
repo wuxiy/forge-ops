@@ -172,7 +172,7 @@ public class FeedbackWorkflow {
         switch (decision) {
             case NEEDS_INPUT -> feedback.transitionTo(FeedbackState.NEEDS_INPUT);
             case NO_CODE_REQUIRED -> feedback.transitionTo(FeedbackState.NO_CODE_REQUIRED);
-            case CODING_REQUIRED -> {
+            case PROCEED_CODING -> {
                 feedback.transitionTo(FeedbackState.CODE_QUEUED);
                 queueCoding(feedback, traceId);
             }
