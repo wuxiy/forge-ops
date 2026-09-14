@@ -15,6 +15,8 @@ export interface ExecutionSnapshot {
   providerRunId: string | null
   state: RunState
   failureCategory?: string
+  resultJson?: string
+  resultError?: string
   updatedAt: string
 }
 
@@ -28,6 +30,8 @@ export interface PaseoAgentSnapshot {
   id: string
   status: string | null
   lastError?: { message?: string } | null
+  resultJson?: string
+  resultError?: string
 }
 
 export interface PaseoAdapter {

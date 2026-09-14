@@ -38,8 +38,24 @@ export class PaseoSdkAdapter implements PaseoAdapter {
 
   async inspect(providerRunId: string): Promise<PaseoAgentSnapshot | null> {
     await this.connect()
-    const result = await this.client.agents.ref(providerRunId).refresh()
-    return result ? snapshot(result.agent, providerRunId) : null
+    const agent = this.client.agents.ref(providerRunId)
+    const result = await agent.refresh()
+    if (!result) return null
+    const current = snapshot(result.agent, providerRunId)
+    if (current.status !== 'idle' && current.status !== 'closed') return current
+    try {
+      const timeline = await agent.timeline.refetch({ direction: 'tail', limit: 200, projection: 'canonical' })
+      if (timeline.error) return { ...current, resultError: 'PASEO_TIMELINE_UNAVAILABLE' }
+      const output = latestAssistantMessage(timeline.entries)
+      if (!output) return { ...current, resultError: 'PASEO_OUTPUT_MISSING' }
+      const parsed = JSON.parse(output)
+      if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+        return { ...current, resultError: 'PASEO_OUTPUT_NOT_OBJECT' }
+      }
+      return { ...current, resultJson: JSON.stringify(parsed) }
+    } catch {
+      return { ...current, resultError: 'PASEO_OUTPUT_UNAVAILABLE' }
+    }
   }
 
   async cancel(providerRunId: string): Promise<void> {
@@ -59,6 +75,19 @@ export class PaseoSdkAdapter implements PaseoAdapter {
     await this.daemon.connect()
     this.connected = true
   }
+}
+
+function latestAssistantMessage(entries: Array<{ item: { type: string; text?: string } }>): string | null {
+  const chunks: string[] = []
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const item = entries[index].item
+    if (item.type === 'assistant_message') {
+      chunks.push(item.text ?? '')
+    } else if (chunks.length) {
+      break
+    }
+  }
+  return chunks.length ? chunks.reverse().join('') : null
 }
 
 function worktreeBranch(input: ExecutionRequest): string {

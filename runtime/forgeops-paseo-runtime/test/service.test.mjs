@@ -20,7 +20,8 @@ class FakePaseo {
   }
 
   async inspect(id) {
-    return this.agents.get(id) ?? null
+    const agent = this.agents.get(id)
+    return agent ? { ...agent, resultJson: '{"classification":"NO_CODE_REQUIRED"}' } : null
   }
 
   async cancel(id) {
@@ -97,7 +98,18 @@ test('requires a token, keeps one execution per idempotency key, and survives re
   assert.deepEqual(await duplicate.json(), snapshots[0])
   assert.equal(secondAdapter.creations, 0)
 
-  const cancelled = await request(secondUrl, '/v1/runs/evt-1', { method: 'POST' })
+  secondAdapter.agents.set('paseo-1', { id: 'paseo-1', status: 'idle' })
+  const completed = await request(secondUrl, '/v1/runs/evt-1')
+  assert.equal(completed.status, 200)
+  const completedSnapshot = await completed.json()
+  assert.equal(completedSnapshot.state, 'SUCCEEDED')
+  assert.equal(completedSnapshot.resultJson, '{"classification":"NO_CODE_REQUIRED"}')
+
+  const cancelSubmit = await request(secondUrl, '/v1/runs', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload('evt-cancel')),
+  })
+  assert.equal(cancelSubmit.status, 202)
+  const cancelled = await request(secondUrl, '/v1/runs/evt-cancel', { method: 'POST' })
   assert.equal(cancelled.status, 200)
   assert.equal((await cancelled.json()).state, 'CANCELLED')
   assert.equal(secondAdapter.cancellations, 1)

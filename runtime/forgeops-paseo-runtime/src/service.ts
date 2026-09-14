@@ -58,7 +58,7 @@ export class ExecutionService {
       const updated: PersistedRun = { ...record, state: mapState(provider.status), updatedAt: new Date().toISOString() }
       if (provider.lastError?.message) updated.failureCategory = 'PASEO_ERROR'
       await this.store.save(updated)
-      return toSnapshot(updated)
+      return toSnapshot(updated, provider.resultJson, provider.resultError)
     } catch {
       return toSnapshot(record)
     }
@@ -102,6 +102,14 @@ function terminal(state: RunState): boolean {
   return state === 'SUCCEEDED' || state === 'FAILED' || state === 'CANCELLED' || state === 'TIMED_OUT'
 }
 
-function toSnapshot(record: PersistedRun): ExecutionSnapshot {
-  return { idempotencyKey: record.idempotencyKey, providerRunId: record.providerRunId, state: record.state, failureCategory: record.failureCategory, updatedAt: record.updatedAt }
+function toSnapshot(record: PersistedRun, resultJson?: string, resultError?: string): ExecutionSnapshot {
+  return {
+    idempotencyKey: record.idempotencyKey,
+    providerRunId: record.providerRunId,
+    state: record.state,
+    failureCategory: record.failureCategory,
+    resultJson,
+    resultError,
+    updatedAt: record.updatedAt,
+  }
 }

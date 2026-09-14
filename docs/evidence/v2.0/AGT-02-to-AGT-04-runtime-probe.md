@@ -17,6 +17,7 @@
 
 - `pnpm --filter @forgeops/paseo-runtime typecheck`：通过；
 - `pnpm --filter @forgeops/paseo-runtime test`：2/2 通过，覆盖 Bearer 鉴权、路径隔离、10 次并发幂等、持久化重启恢复与取消；
+- Runtime 对已完成的真实 Probe 读取 Paseo canonical timeline，合并 assistant 输出片段并得到规范化 JSON `{"decision":"ok"}`；输出只在受保护的 inspect 响应中返回，不写入 Runtime 本地状态文件；
 - 首次执行发现并修复并发请求返回 `SUBMITTING` 且缺少 Provider Run ID 的竞态；当前同 key 请求会等待首个提交完成。
 
 未签收的项：

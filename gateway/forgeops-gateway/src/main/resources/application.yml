@@ -17,7 +17,7 @@ spring:
 
 forgeops:
   v2:
-    # 2.0 只使用新数据库；不读取 V0.1 表、Multica 状态或历史回调。
+    # 2.0 只使用新数据库；不读取 V0.1 表或历史回调。
     enabled: true
 
 logging:
