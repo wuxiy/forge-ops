@@ -19,7 +19,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 
 /** Explicit localhost HTTP test against a disposable PostgreSQL database. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "forgeops.v2.security.token-secret=integration-test-security-secret")
+        properties = {"forgeops.v2.security.token-secret=integration-test-security-secret",
+                "forgeops.v2.registry.path=src/test/resources/v2-registry", "forgeops.v2.registry.workspace-root=."})
 class FeedbackSecurityPostgresIT {
 
     private static final String PROJECT_A = "security-project-a";
@@ -46,8 +47,11 @@ class FeedbackSecurityPostgresIT {
                 + "\"traceId\":\"security-it\"}";
 
         HttpResponse<String> preflight = options(PROJECT_A, "https://unregistered.example");
-        assertEquals(401, preflight.statusCode());
+        assertEquals(403, preflight.statusCode());
         assertFalse(preflight.headers().firstValue("Access-Control-Allow-Origin").isPresent());
+        HttpResponse<String> allowedPreflight = options(PROJECT_A, "https://app.test");
+        assertEquals(204, allowedPreflight.statusCode());
+        assertEquals("https://app.test", allowedPreflight.headers().firstValue("Access-Control-Allow-Origin").orElseThrow());
         assertEquals(401, post(PROJECT_A, null, payload).statusCode());
         String wrongProject = tokens.issue("user-a", "security-project-b", Set.of("feedback:write"));
         assertEquals(403, post(PROJECT_A, wrongProject, payload).statusCode());

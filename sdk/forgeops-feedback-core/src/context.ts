@@ -1,90 +1,55 @@
-import { RequestContextCollector, attachAxios } from './collector'
+import { RequestContextCollector } from './collector'
 import { ForgeOpsGatewayClient } from './gateway'
-import { ulid } from './ulid'
-import type { FeedbackSubmission, ForgeOpsOptions, ReporterInfo } from './types'
+import type { BrowserContext, FeedbackDraft, FeedbackView, ForgeOpsOptions } from './types'
 
-export * from './types'
-export { RequestContextCollector, attachAxios, ForgeOpsGatewayClient, ulid }
-
-/** 采集上下文（供各框架壳 / DOM Widget 共用）：组装白名单提交载荷。 */
+/** One framework-neutral core owns collector lifecycle and v2 API calls. */
 export class FeedbackCore {
-  readonly options: ForgeOpsOptions
   readonly collector: RequestContextCollector
   readonly client: ForgeOpsGatewayClient
-  private reporterName = ''
+  private started = false
 
-  constructor(options: ForgeOpsOptions) {
-    this.options = options
-    this.collector = new RequestContextCollector(options.requestBufferSize ?? 50)
-    this.client = new ForgeOpsGatewayClient(options.gatewayUrl)
+  constructor(readonly options: ForgeOpsOptions) {
+    this.collector = new RequestContextCollector()
+    this.client = new ForgeOpsGatewayClient(options)
   }
 
   get enabled(): boolean {
-    const allow = this.options.enabledEnvironments ?? ['test', 'uat', 'staging']
-    return allow.includes(this.options.environment)
-  }
-
-  /** 上次提交人（「我的反馈」默认查询者）。 */
-  get lastReporterName(): string {
-    return this.reporterName
-  }
-
-  setReporterName(name: string): void {
-    this.reporterName = name
-  }
-
-  getReporter(): ReporterInfo | null {
-    const fromApp = this.options.getReporter?.()
-    if (fromApp?.name) return fromApp
-    return this.reporterName ? { name: this.reporterName } : null
+    return this.options.enabled !== false
   }
 
   start(): void {
-    if (this.enabled) this.collector.start()
+    if (this.started || !this.enabled) return
+    this.started = true
+    this.collector.start()
   }
 
-  buildSubmission(form: {
-    type: FeedbackSubmission['type']
-    title: string
-    description: string
-    expectedBehavior: string
-    steps: string
-    note: string
-    reporterName: string
-    screenshot?: string
-  }): FeedbackSubmission {
-    const opts = this.options
-    const frontend = opts.getFrontendInfo?.() || {}
-    const backend = opts.getBackendInfo?.() || {}
+  stop(): void {
+    if (!this.started) return
+    this.started = false
+    this.collector.stop()
+  }
+
+  submit(draft: FeedbackDraft): Promise<FeedbackView> {
+    return this.client.submit(draft, this.browserContext())
+  }
+
+  mine(): Promise<FeedbackView[]> {
+    return this.client.mine()
+  }
+
+  reopen(id: string, reason: string): Promise<FeedbackView> {
+    return this.client.reopen(id, reason)
+  }
+
+  private browserContext(): BrowserContext {
+    if (typeof window === 'undefined') return {}
+    const failed = this.collector.failedRequests()
+    const errors = this.collector.consoleErrors()
     return {
-      schemaVersion: '1.0',
-      projectId: opts.projectId,
-      type: form.type,
-      title: form.title || undefined,
-      description: form.description,
-      expectedBehavior: form.expectedBehavior || undefined,
-      steps: form.steps || undefined,
-      note: form.note || undefined,
-      reporter: this.getReporter() ?? { name: form.reporterName },
-      environment: opts.environment,
-      page: {
-        url: location.href,
-        route: opts.getRouteName?.(),
-        title: document.title,
-      },
-      client: {
-        userAgent: navigator.userAgent,
-        platform: navigator.platform,
-        language: navigator.language,
-        screen: `${screen.width}x${screen.height}`,
-        viewport: `${innerWidth}x${innerHeight}`,
-      },
-      frontend,
-      backend: backend.version || backend.commit ? backend : undefined,
-      requests: this.collector.failedRequests(),
-      consoleErrors: this.collector.consoleErrorList(),
-      screenshot: form.screenshot,
-      occurredAt: new Date().toISOString(),
+      url: window.location.href,
+      route: this.options.getRoute?.(),
+      console: errors.length ? errors.join('\n') : undefined,
+      requestSummary: failed.length ? JSON.stringify(failed) : undefined,
     }
   }
 }

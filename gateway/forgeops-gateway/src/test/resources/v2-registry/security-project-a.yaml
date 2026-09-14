@@ -1,0 +1,10 @@
+id: security-project-a
+enabled: true
+repositoryRoot: .
+allowedPaths:
+  - .
+browserOrigins:
+  - https://app.test
+policy:
+  autoMerge: false
+  productionDeploy: false

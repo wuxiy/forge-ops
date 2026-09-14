@@ -12,7 +12,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /** Every 2.0 API request requires a signed, short-lived project-scoped bearer token. */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class ProjectTokenFilter extends OncePerRequestFilter {
 
     private final ProjectTokenService tokens;

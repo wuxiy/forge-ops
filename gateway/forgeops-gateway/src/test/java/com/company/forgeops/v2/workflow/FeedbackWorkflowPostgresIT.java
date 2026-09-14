@@ -23,7 +23,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * ordinary unit-test runs cannot accidentally use a configured non-test datasource.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        properties = "forgeops.v2.security.token-secret=integration-test-security-secret")
+        properties = {"forgeops.v2.security.token-secret=integration-test-security-secret",
+                "forgeops.v2.registry.path=src/test/resources/v2-registry", "forgeops.v2.registry.workspace-root=."})
 class FeedbackWorkflowPostgresIT {
 
     @Autowired

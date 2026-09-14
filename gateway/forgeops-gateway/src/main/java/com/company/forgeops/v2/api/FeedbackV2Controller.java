@@ -5,6 +5,7 @@ import com.company.forgeops.v2.context.ContextPreparation;
 import com.company.forgeops.v2.context.PreparedContext;
 import com.company.forgeops.v2.feedback.domain.Feedback;
 import com.company.forgeops.v2.feedback.domain.FeedbackRepository;
+import com.company.forgeops.v2.registry.ProjectCatalog;
 import com.company.forgeops.v2.security.CallerIdentity;
 import com.company.forgeops.v2.security.ProjectToken;
 import com.company.forgeops.v2.workflow.FeedbackWorkflow;
@@ -32,13 +33,15 @@ public class FeedbackV2Controller {
     private final FeedbackRepository feedbacks;
     private final ContextPreparation contextPreparation;
     private final AuditTrail auditTrail;
+    private final ProjectCatalog catalog;
 
     public FeedbackV2Controller(FeedbackWorkflow workflow, FeedbackRepository feedbacks,
-            ContextPreparation contextPreparation, AuditTrail auditTrail) {
+            ContextPreparation contextPreparation, AuditTrail auditTrail, ProjectCatalog catalog) {
         this.workflow = workflow;
         this.feedbacks = feedbacks;
         this.contextPreparation = contextPreparation;
         this.auditTrail = auditTrail;
+        this.catalog = catalog;
     }
 
     @PostMapping
@@ -80,7 +83,7 @@ public class FeedbackV2Controller {
 
     private ProjectToken authorize(String projectId, String scope, UUID feedbackId) {
         ProjectToken identity = CallerIdentity.require();
-        if (!identity.projectId().equals(projectId) || !identity.allows(scope)) {
+        if (catalog.resolve(projectId).isEmpty() || !identity.projectId().equals(projectId) || !identity.allows(scope)) {
             auditTrail.record(feedbackId, null, null, identity.subject(), "AUTHORIZATION_DENIED", "REJECTED", null,
                     "{\"projectId\":\"" + projectId + "\",\"scope\":\"" + scope + "\"}");
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);

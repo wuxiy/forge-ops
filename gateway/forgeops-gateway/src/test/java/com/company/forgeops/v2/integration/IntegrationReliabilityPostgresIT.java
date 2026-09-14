@@ -28,7 +28,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 /** Explicitly run against a disposable PostgreSQL database; never included in a default unit-test run. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        properties = "forgeops.v2.security.token-secret=integration-test-security-secret")
+        properties = {"forgeops.v2.security.token-secret=integration-test-security-secret",
+                "forgeops.v2.registry.path=src/test/resources/v2-registry", "forgeops.v2.registry.workspace-root=."})
 class IntegrationReliabilityPostgresIT {
 
     @Autowired
