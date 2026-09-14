@@ -9,6 +9,8 @@ import com.company.forgeops.v2.feedback.domain.FeedbackCycleRepository;
 import com.company.forgeops.v2.feedback.domain.FeedbackRepository;
 import com.company.forgeops.v2.feedback.domain.ProjectFeedbackCounter;
 import com.company.forgeops.v2.feedback.domain.ProjectFeedbackCounterRepository;
+import com.company.forgeops.v2.integration.domain.OutboxEvent;
+import com.company.forgeops.v2.integration.domain.OutboxEventRepository;
 import jakarta.persistence.OptimisticLockException;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -28,14 +30,17 @@ public class FeedbackWorkflow {
     private final FeedbackCycleRepository cycles;
     private final ContextSnapshotRepository snapshots;
     private final ProjectFeedbackCounterRepository counters;
+    private final OutboxEventRepository outboxEvents;
     private final AuditTrail auditTrail;
 
     public FeedbackWorkflow(FeedbackRepository feedbacks, FeedbackCycleRepository cycles,
-            ContextSnapshotRepository snapshots, ProjectFeedbackCounterRepository counters, AuditTrail auditTrail) {
+            ContextSnapshotRepository snapshots, ProjectFeedbackCounterRepository counters, OutboxEventRepository outboxEvents,
+            AuditTrail auditTrail) {
         this.feedbacks = feedbacks;
         this.cycles = cycles;
         this.snapshots = snapshots;
         this.counters = counters;
+        this.outboxEvents = outboxEvents;
         this.auditTrail = auditTrail;
     }
 
@@ -53,6 +58,7 @@ public class FeedbackWorkflow {
         snapshots.save(ContextSnapshot.create(feedback.getId(), cycle.getId(), CONTEXT_SCHEMA_VERSION, command.contextSha256(),
                 command.redactionCount(), command.redactedContextJson()));
         feedback.transitionTo(FeedbackState.CONTEXT_READY);
+        enqueue(feedback, "FEEDBACK_SUBMITTED");
         auditTrail.record(feedback.getId(), cycle.getId(), null, command.reporterSubject(), "FEEDBACK_SUBMITTED", "SUCCESS",
                 command.traceId(), "{\"displayNo\":" + displayNo + "}");
         return feedback;
@@ -63,6 +69,7 @@ public class FeedbackWorkflow {
         Feedback feedback = get(feedbackId);
         FeedbackState before = feedback.getState();
         feedback.transitionTo(target);
+        enqueue(feedback, "WORKFLOW_STATE_CHANGED");
         auditTrail.record(feedbackId, feedback.getCurrentCycleId(), null, actor, "STATE_TRANSITION", "SUCCESS", traceId,
                 "{\"from\":\"" + before + "\",\"to\":\"" + target + "\"}");
         return feedback;
@@ -80,6 +87,7 @@ public class FeedbackWorkflow {
         snapshots.save(ContextSnapshot.create(feedbackId, nextCycle.getId(), CONTEXT_SCHEMA_VERSION, contextSha256,
                 redactionCount, redactedContextJson));
         feedback.transitionTo(FeedbackState.CONTEXT_READY);
+        enqueue(feedback, "FEEDBACK_REOPENED");
         auditTrail.record(feedbackId, nextCycle.getId(), null, actor, "FEEDBACK_REOPENED", "SUCCESS", traceId,
                 "{\"cycleNo\":" + nextCycleNo + "}");
         return feedback;
@@ -99,6 +107,14 @@ public class FeedbackWorkflow {
             throw new OptimisticLockException("Concurrent counter initialization for project " + projectId,
                     concurrentFirstCounter);
         }
+    }
+
+    private void enqueue(Feedback feedback, String eventType) {
+        String idempotencyKey = feedback.getId() + "/" + feedback.getCurrentCycleId() + "/" + feedback.getVersion()
+                + "/" + eventType + "/" + feedback.getState();
+        String payload = "{\"feedbackId\":\"" + feedback.getId() + "\",\"cycleId\":\""
+                + feedback.getCurrentCycleId() + "\",\"state\":\"" + feedback.getState() + "\"}";
+        outboxEvents.save(OutboxEvent.pending("FEEDBACK", feedback.getId(), eventType, idempotencyKey, payload));
     }
 
     private static void validate(SubmitFeedbackCommand command) {
