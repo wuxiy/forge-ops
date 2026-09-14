@@ -2,5 +2,6 @@ packages:
   - sdk/forgeops-feedback-core
   - sdk/forgeops-feedback-dom
   - sdk/forgeops-tracing-fastify
+  - runtime/forgeops-paseo-runtime
   - examples/demo-app/web
   - examples/demo-app/react-demo

@@ -1,0 +1,19 @@
+{
+  "name": "@forgeops/paseo-runtime",
+  "version": "2.0.0-experimental.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "pnpm build && node --test test/*.test.mjs",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@getpaseo/client": "0.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "typescript": "5.9.3"
+  }
+}
