@@ -22,6 +22,11 @@ forgeops:
     runtime:
       base-url: ${FORGEOPS_RUNTIME_URL:}
       service-token: ${FORGEOPS_RUNTIME_SERVICE_TOKEN:}
+    github:
+      enabled: ${FORGEOPS_V2_GITHUB_ENABLED:false}
+      webhook-secret: ${FORGEOPS_V2_GITHUB_WEBHOOK_SECRET:}
+      api-base-url: ${FORGEOPS_V2_GITHUB_API_BASE_URL:https://api.github.com}
+      api-token: ${FORGEOPS_V2_GITHUB_API_TOKEN:}
 
 logging:
   level:

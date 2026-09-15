@@ -61,6 +61,8 @@ mvn -Dtest='FeedbackWorkflowPostgresIT,IntegrationReliabilityPostgresIT,Feedback
 
 Gateway 必须由部署环境提供：独立 PostgreSQL 连接、`FORGEOPS_V2_REGISTRY_PATH`、`FORGEOPS_V2_REGISTRY_WORKSPACE_ROOT`、`FORGEOPS_V2_SECURITY_TOKEN_SECRET`、`FORGEOPS_RUNTIME_URL` 和 `FORGEOPS_RUNTIME_SERVICE_TOKEN`。没有 Runtime 地址或服务凭证时 Gateway 应拒绝启动。
 
+GitHub 交付证据默认关闭。启用后必须同时提供 `FORGEOPS_V2_GITHUB_ENABLED=true`、`FORGEOPS_V2_GITHUB_WEBHOOK_SECRET` 和最小只读权限的 `FORGEOPS_V2_GITHUB_API_TOKEN`；每个 v2 项目声明准确的 `github.repository`、`github.baseBranch`、`github.allowedMergeLogins` 与非生产 `github.testEnvironment`。Webhook 入口为 `POST /integrations/github`，只接受 `X-Hub-Signature-256` 校验后的字节；Agent 报告的 PR 还会被 GitHub REST 查询独立比对。
+
 Runtime 必须由部署环境提供：`FORGEOPS_RUNTIME_SERVICE_TOKEN`、`FORGEOPS_RUNTIME_DATA_FILE`、`FORGEOPS_RUNTIME_ALLOWED_ROOTS`；可配置 `FORGEOPS_RUNTIME_RUN_TIMEOUT_MS`（默认 15 分钟）和 `FORGEOPS_RUNTIME_MAX_CONCURRENT_PER_PROJECT`（默认 1）。它不会持久化 Prompt、Context 或 Agent 输出。
 
 真实 Git/CI/测试部署接入、最小权限凭证和两个试点仓库均需 Owner 明确指定后才能进行，详见验收清单的 `S-06`、`DEL-*`、`OPS-*` 与 `VAL-*`。

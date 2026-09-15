@@ -183,6 +183,83 @@ public class FeedbackWorkflow {
                 "{\"decision\":\"" + decision + "\"}");
     }
 
+    /** Stores a schema-sanitized Coding declaration but deliberately leaves Feedback in CODE_RUNNING. */
+    @Transactional
+    public AgentRun recordCodingDeclaration(UUID agentRunId, String resultJson, String traceId) {
+        AgentRun run = agentRuns.lockById(agentRunId)
+                .orElseThrow(() -> new IllegalArgumentException("Agent run does not exist: " + agentRunId));
+        if (run.getRole() != AgentRole.CODING) {
+            throw new WorkflowConflictException("Coding declaration is not applicable to run " + agentRunId);
+        }
+        if (run.getState() == AgentRunState.SUCCEEDED) {
+            return run;
+        }
+        if (run.getState() != AgentRunState.RUNNING) {
+            throw new WorkflowConflictException("Coding declaration is not applicable to run " + agentRunId);
+        }
+        Feedback feedback = get(run.getFeedbackId());
+        if (feedback.getState() != FeedbackState.CODE_RUNNING || !feedback.getCurrentCycleId().equals(run.getCycleId())) {
+            throw new WorkflowConflictException("Feedback is not running coding for this cycle");
+        }
+        run.succeed(resultJson);
+        auditTrail.record(feedback.getId(), run.getCycleId(), run.getId(), "runtime", "CODING_DECLARED", "SUCCESS", traceId,
+                "{\"deliveryEvidence\":\"PENDING\"}");
+        return run;
+    }
+
+    /** A verified provider fact is the only Coding path that may enter PR_READY. */
+    @Transactional
+    public void recordPrEvidenceVerified(UUID feedbackId, UUID cycleId, UUID agentRunId, String traceId) {
+        Feedback feedback = get(feedbackId);
+        if (!feedback.getCurrentCycleId().equals(cycleId)) {
+            throw new WorkflowConflictException("Delivery evidence does not belong to the current cycle");
+        }
+        if (feedback.getState() == FeedbackState.PR_READY) {
+            return;
+        }
+        if (feedback.getState() != FeedbackState.CODE_RUNNING) {
+            throw new WorkflowConflictException("Feedback is not awaiting delivery evidence: " + feedback.getState());
+        }
+        feedback.transitionTo(FeedbackState.PR_READY);
+        auditTrail.record(feedback.getId(), cycleId, agentRunId, "github", "PR_EVIDENCE_VERIFIED", "SUCCESS", traceId,
+                "{\"state\":\"PR_READY\"}");
+    }
+
+    @Transactional
+    public void recordPrEvidenceRejected(UUID feedbackId, UUID cycleId, UUID agentRunId, String reason, String traceId) {
+        Feedback feedback = get(feedbackId);
+        if (!feedback.getCurrentCycleId().equals(cycleId)) {
+            throw new WorkflowConflictException("Delivery evidence does not belong to the current cycle");
+        }
+        if (feedback.getState() == FeedbackState.EXECUTION_FAILED) {
+            return;
+        }
+        if (feedback.getState() != FeedbackState.CODE_RUNNING) {
+            throw new WorkflowConflictException("Feedback is not awaiting delivery evidence: " + feedback.getState());
+        }
+        feedback.transitionTo(FeedbackState.EXECUTION_FAILED);
+        auditTrail.record(feedback.getId(), cycleId, agentRunId, "github", "PR_EVIDENCE_REJECTED", "FAILED", traceId,
+                "{\"reason\":\"" + reason + "\"}");
+    }
+
+    /** A signed GitHub event may enter BUILD_RUNNING only after verified evidence and an allowlisted human merge. */
+    @Transactional
+    public void recordAuthorizedMerge(UUID feedbackId, UUID cycleId, UUID agentRunId, String mergerLogin, String traceId) {
+        Feedback feedback = get(feedbackId);
+        if (!feedback.getCurrentCycleId().equals(cycleId)) {
+            throw new WorkflowConflictException("Merge event does not belong to the current cycle");
+        }
+        if (feedback.getState() == FeedbackState.BUILD_RUNNING) {
+            return;
+        }
+        if (feedback.getState() != FeedbackState.PR_READY) {
+            throw new WorkflowConflictException("Feedback is not ready for an authorized merge: " + feedback.getState());
+        }
+        feedback.transitionTo(FeedbackState.BUILD_RUNNING);
+        auditTrail.record(feedback.getId(), cycleId, agentRunId, "github:" + mergerLogin, "PR_MERGED", "SUCCESS", traceId,
+                "{\"state\":\"BUILD_RUNNING\"}");
+    }
+
     /** A retry is a new immutable attempt in the current Cycle; terminal run facts are never overwritten. */
     @Transactional
     public Feedback retry(UUID feedbackId, AgentRole role, String actor, String traceId) {

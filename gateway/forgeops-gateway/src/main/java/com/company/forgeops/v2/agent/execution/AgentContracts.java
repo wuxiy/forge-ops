@@ -123,6 +123,24 @@ public final class AgentContracts {
         }
     }
 
+    public static String canonicalCodingJson(ObjectMapper json, CodingResult result) {
+        try {
+            Map<String, Object> canonical = new LinkedHashMap<>();
+            canonical.put("outcome", result.outcome().name());
+            canonical.put("branch", result.branch());
+            canonical.put("commitSha", result.commitSha());
+            canonical.put("prUrl", result.prUrl());
+            canonical.put("changedFiles", result.changedFiles());
+            canonical.put("tests", result.tests());
+            canonical.put("risks", result.risks());
+            canonical.put("failureCategory", result.failureCategory());
+            canonical.put("failureMessage", result.failureMessage());
+            return json.writeValueAsString(canonical);
+        } catch (JacksonException failure) {
+            throw new IllegalStateException("cannot serialize validated coding result", failure);
+        }
+    }
+
     private static String redact(String value) {
         String cleaned = BEARER.matcher(value).replaceAll(MASK);
         cleaned = SECRET.matcher(cleaned).replaceAll("$1$2" + MASK);

@@ -55,6 +55,8 @@ public class GitHubWebhookNormalizer {
                 throw new IllegalArgumentException("pull_request.merged_by.login must be a non-blank string or null");
             }
             payload.put("mergedBy", mergedBy.asString());
+        } else {
+            payload.put("mergedBy", null);
         }
     }
 

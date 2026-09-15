@@ -5,6 +5,7 @@ import com.company.forgeops.v2.agent.domain.AgentRun;
 import com.company.forgeops.v2.agent.domain.AgentRunRepository;
 import com.company.forgeops.v2.agent.domain.AgentRunState;
 import com.company.forgeops.v2.workflow.FeedbackWorkflow;
+import com.company.forgeops.v2.verification.DeliveryEvidenceService;
 import tools.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -16,12 +17,15 @@ public class AgentRunMonitor {
     private final AgentRunRepository runs;
     private final AgentExecution execution;
     private final FeedbackWorkflow workflow;
+    private final DeliveryEvidenceService deliveryEvidence;
     private final ObjectMapper json;
 
-    public AgentRunMonitor(AgentRunRepository runs, AgentExecution execution, FeedbackWorkflow workflow, ObjectMapper json) {
+    public AgentRunMonitor(AgentRunRepository runs, AgentExecution execution, FeedbackWorkflow workflow,
+            DeliveryEvidenceService deliveryEvidence, ObjectMapper json) {
         this.runs = runs;
         this.execution = execution;
         this.workflow = workflow;
+        this.deliveryEvidence = deliveryEvidence;
         this.json = json;
     }
 
@@ -51,15 +55,19 @@ public class AgentRunMonitor {
         }
         if (run.getRole() == AgentRole.CODING) {
             try {
-                AgentContracts.parseCoding(json, snapshot.resultJson());
+                var result = AgentContracts.parseCoding(json, snapshot.resultJson());
+                if (result.outcome() != AgentContracts.CodingOutcome.PR_CREATED) {
+                    workflow.recordRuntimeFailure(run.getId(), AgentRunState.FAILED, "CODING_" + result.outcome(),
+                            "monitor:" + run.getId());
+                    return;
+                }
+                deliveryEvidence.registerCodingPrDeclaration(run.getId(), result,
+                        AgentContracts.canonicalCodingJson(json, result), "monitor:" + run.getId());
             } catch (IllegalArgumentException invalid) {
                 workflow.recordRuntimeFailure(run.getId(), AgentRunState.INVALID_OUTPUT, "INVALID_CODING_OUTPUT",
                         "monitor:" + run.getId());
                 return;
             }
-            // An Agent declaration is never delivery evidence. Only a future provider-backed verifier may enter PR_READY.
-            workflow.recordRuntimeFailure(run.getId(), AgentRunState.FAILED, "DELIVERY_EVIDENCE_REQUIRED",
-                    "monitor:" + run.getId());
             return;
         }
         try {
