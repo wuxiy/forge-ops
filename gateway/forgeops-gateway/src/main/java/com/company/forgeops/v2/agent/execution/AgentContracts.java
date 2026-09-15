@@ -39,12 +39,13 @@ public final class AgentContracts {
         }
         return objectSchema(Map.of(
                 "outcome", Map.of("type", "string", "enum", List.of("PR_CREATED", "NO_CHANGE", "FAILED")),
-                "branch", Map.of("type", "string"), "commitSha", Map.of("type", "string"), "prUrl", Map.of("type", "string"),
+                "branch", nullableString(), "commitSha", nullableString(), "prUrl", nullableString(),
                 "changedFiles", Map.of("type", "array", "items", Map.of("type", "string")),
                 "tests", Map.of("type", "array", "items", Map.of("type", "string")),
                 "risks", Map.of("type", "array", "items", Map.of("type", "string")),
-                "failureCategory", Map.of("type", "string"), "failureMessage", Map.of("type", "string")),
-                List.of("outcome", "changedFiles", "tests", "risks", "failureCategory", "failureMessage"));
+                "failureCategory", nullableString(), "failureMessage", nullableString()),
+                List.of("outcome", "branch", "commitSha", "prUrl", "changedFiles", "tests", "risks",
+                        "failureCategory", "failureMessage"));
     }
 
     public static String prompt(AgentRole role, String redactedContextJson) {
@@ -60,12 +61,8 @@ public final class AgentContracts {
         try {
             JsonNode root = json.readTree(resultJson);
             Set<String> expected = Set.of("decision", "summary", "rootCause", "evidence", "relatedFiles", "missingInformation", "risks", "suggestedPlan");
-            Set<String> actual = new HashSet<>();
-            if (root != null && root.isObject()) {
-                actual.addAll(root.propertyNames());
-            }
-            if (root == null || !root.isObject() || !actual.equals(expected)
-                    || !root.get("decision").isString() || blank(root.get("summary")) || blank(root.get("rootCause"))) {
+            requireExactObject(root, expected, "triage");
+            if (!root.get("decision").isString() || blank(root.get("summary")) || blank(root.get("rootCause"))) {
                 throw new IllegalArgumentException("triage output does not match the exact contract");
             }
             return new TriageResult(TriageDecision.valueOf(root.get("decision").asString()), redact(root.get("summary").asString()),
@@ -76,6 +73,26 @@ public final class AgentContracts {
         }
     }
 
+    /** Validates a Coding declaration only; DeliveryEvidence must independently verify any PR or commit claim. */
+    public static CodingResult parseCoding(ObjectMapper json, String resultJson) {
+        try {
+            JsonNode root = json.readTree(resultJson);
+            requireExactObject(root, Set.of("outcome", "branch", "commitSha", "prUrl", "changedFiles", "tests", "risks",
+                    "failureCategory", "failureMessage"), "coding");
+            if (!root.get("outcome").isString()) {
+                throw new IllegalArgumentException("coding outcome must be a string");
+            }
+            CodingResult result = new CodingResult(CodingOutcome.valueOf(root.get("outcome").asString()),
+                    nullableText(root, "branch"), nullableText(root, "commitSha"), nullableText(root, "prUrl"),
+                    strings(root, "changedFiles"), strings(root, "tests"), strings(root, "risks"),
+                    nullableText(root, "failureCategory"), nullableText(root, "failureMessage"));
+            validateCoding(result);
+            return result;
+        } catch (JacksonException | IllegalArgumentException invalid) {
+            throw new IllegalArgumentException("invalid coding output", invalid);
+        }
+    }
+
     private static Map<String, Object> objectSchema(Map<String, Object> properties, List<String> required) {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
@@ -83,6 +100,10 @@ public final class AgentContracts {
         schema.put("required", required);
         schema.put("additionalProperties", false);
         return Map.copyOf(schema);
+    }
+
+    private static Map<String, Object> nullableString() {
+        return Map.of("type", List.of("string", "null"));
     }
 
     public static String canonicalTriageJson(ObjectMapper json, TriageResult result) {
@@ -114,6 +135,27 @@ public final class AgentContracts {
         return !value.isString() || value.asString().isBlank();
     }
 
+    private static void requireExactObject(JsonNode root, Set<String> expected, String contract) {
+        Set<String> actual = new HashSet<>();
+        if (root != null && root.isObject()) {
+            actual.addAll(root.propertyNames());
+        }
+        if (root == null || !root.isObject() || !actual.equals(expected)) {
+            throw new IllegalArgumentException(contract + " output does not match the exact contract");
+        }
+    }
+
+    private static String nullableText(JsonNode root, String field) {
+        JsonNode value = root.get(field);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        if (blank(value)) {
+            throw new IllegalArgumentException(field + " must be a non-blank string or null");
+        }
+        return redact(value.asString());
+    }
+
     private static List<String> strings(JsonNode root, String field) {
         JsonNode value = root.get(field);
         if (value == null || !value.isArray()) {
@@ -129,13 +171,45 @@ public final class AgentContracts {
         return List.copyOf(result);
     }
 
+    private static void validateCoding(CodingResult result) {
+        switch (result.outcome()) {
+            case PR_CREATED -> {
+                if (result.branch() == null || result.commitSha() == null || result.prUrl() == null
+                        || result.failureCategory() != null || result.failureMessage() != null) {
+                    throw new IllegalArgumentException("PR_CREATED must have branch, commitSha and prUrl, without failure fields");
+                }
+            }
+            case NO_CHANGE -> {
+                if (result.branch() != null || result.commitSha() != null || result.prUrl() != null
+                        || result.failureCategory() != null || result.failureMessage() != null) {
+                    throw new IllegalArgumentException("NO_CHANGE cannot declare delivery or failure fields");
+                }
+            }
+            case FAILED -> {
+                if (result.failureCategory() == null || result.failureMessage() == null) {
+                    throw new IllegalArgumentException("FAILED requires failureCategory and failureMessage");
+                }
+            }
+        }
+    }
+
     public enum TriageDecision {
         NEEDS_INPUT,
         NO_CODE_REQUIRED,
         PROCEED_CODING
     }
 
+    public enum CodingOutcome {
+        PR_CREATED,
+        NO_CHANGE,
+        FAILED
+    }
+
     public record TriageResult(TriageDecision decision, String summary, String rootCause, List<String> evidence,
             List<String> relatedFiles, List<String> missingInformation, List<String> risks, List<String> suggestedPlan) {
+    }
+
+    public record CodingResult(CodingOutcome outcome, String branch, String commitSha, String prUrl, List<String> changedFiles,
+            List<String> tests, List<String> risks, String failureCategory, String failureMessage) {
     }
 }

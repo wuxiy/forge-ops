@@ -49,8 +49,16 @@ public class AgentRunMonitor {
             workflow.recordRuntimeFailure(run.getId(), snapshot.state(), failureCategory(snapshot), "monitor:" + run.getId());
             return;
         }
-        if (run.getRole() != AgentRole.TRIAGE) {
-            workflow.recordRuntimeFailure(run.getId(), AgentRunState.INVALID_OUTPUT, "CODING_RESULT_NOT_YET_VERIFIED",
+        if (run.getRole() == AgentRole.CODING) {
+            try {
+                AgentContracts.parseCoding(json, snapshot.resultJson());
+            } catch (IllegalArgumentException invalid) {
+                workflow.recordRuntimeFailure(run.getId(), AgentRunState.INVALID_OUTPUT, "INVALID_CODING_OUTPUT",
+                        "monitor:" + run.getId());
+                return;
+            }
+            // An Agent declaration is never delivery evidence. Only a future provider-backed verifier may enter PR_READY.
+            workflow.recordRuntimeFailure(run.getId(), AgentRunState.FAILED, "DELIVERY_EVIDENCE_REQUIRED",
                     "monitor:" + run.getId());
             return;
         }

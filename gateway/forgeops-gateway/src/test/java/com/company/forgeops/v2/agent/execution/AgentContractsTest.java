@@ -30,4 +30,29 @@ class AgentContractsTest {
         assertThrows(IllegalArgumentException.class,
                 () -> AgentContracts.parseTriage(JsonMapper.shared(), "{\"decision\":\"APPROVE\",\"summary\":\"ok\",\"rootCause\":\"x\",\"evidence\":[],\"relatedFiles\":[],\"missingInformation\":[],\"risks\":[],\"suggestedPlan\":[]}"));
     }
+
+    @Test
+    void classifiesCompleteCodingDeclarationsWithoutTrustingDeliveryClaims() {
+        var prCreated = AgentContracts.parseCoding(JsonMapper.shared(),
+                "{\"outcome\":\"PR_CREATED\",\"branch\":\"forgeops/v2-fix\",\"commitSha\":\"abc123\",\"prUrl\":\"https://example.invalid/pr/1\",\"changedFiles\":[\"src/App.java\"],\"tests\":[\"mvn test\"],\"risks\":[],\"failureCategory\":null,\"failureMessage\":null}");
+        var noChange = AgentContracts.parseCoding(JsonMapper.shared(),
+                "{\"outcome\":\"NO_CHANGE\",\"branch\":null,\"commitSha\":null,\"prUrl\":null,\"changedFiles\":[],\"tests\":[],\"risks\":[],\"failureCategory\":null,\"failureMessage\":null}");
+        var failed = AgentContracts.parseCoding(JsonMapper.shared(),
+                "{\"outcome\":\"FAILED\",\"branch\":null,\"commitSha\":null,\"prUrl\":null,\"changedFiles\":[],\"tests\":[],\"risks\":[],\"failureCategory\":\"TEST_FAILURE\",\"failureMessage\":\"unit test failed\"}");
+
+        assertEquals(AgentContracts.CodingOutcome.PR_CREATED, prCreated.outcome());
+        assertEquals("https://example.invalid/pr/1", prCreated.prUrl());
+        assertEquals(AgentContracts.CodingOutcome.NO_CHANGE, noChange.outcome());
+        assertEquals(AgentContracts.CodingOutcome.FAILED, failed.outcome());
+    }
+
+    @Test
+    void rejectsIncompleteOrInternallyInconsistentCodingDeclarations() {
+        assertThrows(IllegalArgumentException.class, () -> AgentContracts.parseCoding(JsonMapper.shared(),
+                "{\"outcome\":\"PR_CREATED\",\"branch\":\"branch\",\"commitSha\":null,\"prUrl\":null,\"changedFiles\":[],\"tests\":[],\"risks\":[],\"failureCategory\":null,\"failureMessage\":null}"));
+        assertThrows(IllegalArgumentException.class, () -> AgentContracts.parseCoding(JsonMapper.shared(),
+                "{\"outcome\":\"FAILED\",\"branch\":null,\"commitSha\":null,\"prUrl\":null,\"changedFiles\":[],\"tests\":[],\"risks\":[],\"failureCategory\":null,\"failureMessage\":null}"));
+        assertThrows(IllegalArgumentException.class, () -> AgentContracts.parseCoding(JsonMapper.shared(),
+                "{\"outcome\":\"NO_CHANGE\",\"branch\":null,\"commitSha\":null,\"prUrl\":null,\"changedFiles\":[],\"tests\":[],\"risks\":[],\"failureCategory\":null,\"failureMessage\":null,\"forged\":true}"));
+    }
 }
