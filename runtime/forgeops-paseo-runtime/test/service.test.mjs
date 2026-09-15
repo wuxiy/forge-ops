@@ -37,7 +37,7 @@ class FakePaseo {
 const root = await mkdtemp(join(tmpdir(), 'forgeops-runtime-test-'))
 after(() => rm(root, { recursive: true, force: true }))
 
-function config(dataFile, port = 0) {
+function config(dataFile, port = 0, defaultRunTimeoutMs = 1000, maxConcurrentPerProject = 1) {
   return {
     host: '127.0.0.1',
     port,
@@ -46,10 +46,12 @@ function config(dataFile, port = 0) {
     paseoUrl: 'ws://127.0.0.1:17677/ws',
     provider: 'codex/gpt-5.5',
     allowedRoots: [root],
+    defaultRunTimeoutMs,
+    maxConcurrentPerProject,
   }
 }
 
-function payload(key = 'evt-1', cwd = root) {
+function payload(key = 'evt-1', cwd = root, timeoutMs = 1000) {
   return {
     idempotencyKey: key,
     projectId: 'pilot-project',
@@ -57,6 +59,7 @@ function payload(key = 'evt-1', cwd = root) {
     cwd,
     prompt: 'Return one concise classification.',
     outputSchema: { type: 'object', required: ['classification'] },
+    timeoutMs,
   }
 }
 
@@ -135,5 +138,52 @@ test('rejects non-loopback configuration and paths outside the project allowlist
   })
   assert.equal(response.status, 400)
   assert.equal(adapter.creations, 0)
+  await runtime.close()
+})
+
+test('marks a run timed out only after Paseo confirms cancellation', async () => {
+  const adapter = new FakePaseo()
+  const runtime = await startServer(config(join(root, 'timeout.json'), 0, 10), adapter)
+  const address = runtime.server.address()
+  assert.equal(typeof address, 'object')
+  const baseUrl = `http://127.0.0.1:${address.port}`
+  const submitted = await request(baseUrl, '/v1/runs', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload('evt-timeout', root, 10)),
+  })
+  assert.equal(submitted.status, 202)
+  await new Promise((resolve) => setTimeout(resolve, 20))
+
+  const timedOut = await request(baseUrl, '/v1/runs/evt-timeout')
+  assert.equal(timedOut.status, 200)
+  assert.equal((await timedOut.json()).state, 'TIMED_OUT')
+  assert.equal(adapter.cancellations, 1)
+  await runtime.close()
+})
+
+test('leaves excess runs queued until a project capacity slot is free', async () => {
+  const adapter = new FakePaseo()
+  const runtime = await startServer(config(join(root, 'concurrency.json')), adapter)
+  const address = runtime.server.address()
+  assert.equal(typeof address, 'object')
+  const baseUrl = `http://127.0.0.1:${address.port}`
+  const first = await request(baseUrl, '/v1/runs', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload('evt-first')),
+  })
+  assert.equal(first.status, 202)
+  const second = await request(baseUrl, '/v1/runs', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload('evt-second')),
+  })
+  assert.equal(second.status, 202)
+  assert.equal((await second.json()).state, 'QUEUED')
+  assert.equal(adapter.creations, 1)
+
+  adapter.agents.set('paseo-1', { id: 'paseo-1', status: 'idle' })
+  const finished = await request(baseUrl, '/v1/runs/evt-first')
+  assert.equal((await finished.json()).state, 'SUCCEEDED')
+  const retried = await request(baseUrl, '/v1/runs', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload('evt-second')),
+  })
+  assert.equal((await retried.json()).state, 'RUNNING')
+  assert.equal(adapter.creations, 2)
   await runtime.close()
 })

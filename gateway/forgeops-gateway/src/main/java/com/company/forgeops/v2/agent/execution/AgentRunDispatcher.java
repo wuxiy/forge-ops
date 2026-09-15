@@ -10,6 +10,7 @@ import com.company.forgeops.v2.feedback.domain.FeedbackRepository;
 import com.company.forgeops.v2.registry.ProjectCatalog;
 import com.company.forgeops.v2.registry.ResolvedProject;
 import com.company.forgeops.v2.workflow.FeedbackWorkflow;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -25,9 +26,11 @@ public class AgentRunDispatcher {
     private final AgentExecution execution;
     private final FeedbackWorkflow workflow;
     private final TransactionTemplate transactions;
+    private final RuntimeExecutionProperties runtimeProperties;
 
     public AgentRunDispatcher(AgentRunRepository runs, FeedbackRepository feedbacks, ContextSnapshotRepository snapshots,
-            ProjectCatalog catalog, AgentExecution execution, FeedbackWorkflow workflow, TransactionTemplate transactions) {
+            ProjectCatalog catalog, AgentExecution execution, FeedbackWorkflow workflow, TransactionTemplate transactions,
+            RuntimeExecutionProperties runtimeProperties) {
         this.runs = runs;
         this.feedbacks = feedbacks;
         this.snapshots = snapshots;
@@ -35,6 +38,7 @@ public class AgentRunDispatcher {
         this.execution = execution;
         this.workflow = workflow;
         this.transactions = transactions;
+        this.runtimeProperties = runtimeProperties;
     }
 
     public void dispatch(UUID agentRunId) {
@@ -50,12 +54,28 @@ public class AgentRunDispatcher {
             workflow.recordRuntimeSubmission(agentRunId, snapshot.providerRunId(), "outbox:" + agentRunId);
             return;
         }
+        if (snapshot.state() == AgentRunState.QUEUED) {
+            return;
+        }
         if (snapshot.state() == AgentRunState.FAILED || snapshot.state() == AgentRunState.CANCELLED
                 || snapshot.state() == AgentRunState.TIMED_OUT || snapshot.state() == AgentRunState.INVALID_OUTPUT) {
             workflow.recordRuntimeFailure(agentRunId, snapshot.state(), failureCategory(snapshot), "outbox:" + agentRunId);
             return;
         }
         throw new RuntimeUnavailableException("Runtime returned an incomplete submission state: " + snapshot.state());
+    }
+
+    /** Persistent AgentRun state remains QUEUED until a Runtime capacity slot is available. */
+    public int dispatchQueued() {
+        List<UUID> queued = runs.findByState(AgentRunState.QUEUED).stream().map(AgentRun::getId).toList();
+        queued.forEach(agentRunId -> {
+            try {
+                dispatch(agentRunId);
+            } catch (RuntimeUnavailableException unavailable) {
+                // Keep the durable queue untouched; the next reconciliation cycle retries it.
+            }
+        });
+        return queued.size();
     }
 
     private PreparedRun prepare(UUID agentRunId) {
@@ -72,7 +92,7 @@ public class AgentRunDispatcher {
         }
         RuntimeRunRequest request = new RuntimeRunRequest(run.getIdempotencyKey(), project.id(), run.getRole(),
                 project.repositoryRoot(), AgentContracts.prompt(run.getRole(), snapshot.getContentJson()),
-                AgentContracts.outputSchema(run.getRole()));
+                AgentContracts.outputSchema(run.getRole()), runtimeProperties.getRunTimeoutMillis());
         return new PreparedRun(request);
     }
 

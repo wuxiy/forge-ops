@@ -9,6 +9,8 @@ export interface RuntimeConfig {
   paseoPassword?: string
   provider: string
   allowedRoots: string[]
+  defaultRunTimeoutMs: number
+  maxConcurrentPerProject: number
 }
 
 export function loadConfig(environment = process.env): RuntimeConfig {
@@ -21,6 +23,14 @@ export function loadConfig(environment = process.env): RuntimeConfig {
   if (host !== '127.0.0.1' && host !== '::1') throw new Error('Runtime must bind loopback until a private-network deployment is verified')
   const port = Number(environment.FORGEOPS_RUNTIME_PORT ?? '7676')
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('FORGEOPS_RUNTIME_PORT is invalid')
+  const defaultRunTimeoutMs = Number(environment.FORGEOPS_RUNTIME_RUN_TIMEOUT_MS ?? '900000')
+  if (!Number.isInteger(defaultRunTimeoutMs) || defaultRunTimeoutMs < 1 || defaultRunTimeoutMs > 86_400_000) {
+    throw new Error('FORGEOPS_RUNTIME_RUN_TIMEOUT_MS must be between 1 and 86400000')
+  }
+  const maxConcurrentPerProject = Number(environment.FORGEOPS_RUNTIME_MAX_CONCURRENT_PER_PROJECT ?? '1')
+  if (!Number.isInteger(maxConcurrentPerProject) || maxConcurrentPerProject < 1 || maxConcurrentPerProject > 100) {
+    throw new Error('FORGEOPS_RUNTIME_MAX_CONCURRENT_PER_PROJECT must be between 1 and 100')
+  }
   return {
     host,
     port,
@@ -30,6 +40,8 @@ export function loadConfig(environment = process.env): RuntimeConfig {
     paseoPassword: environment.FORGEOPS_PASEO_PASSWORD,
     provider: environment.FORGEOPS_PASEO_PROVIDER ?? 'codex/gpt-5.5',
     allowedRoots,
+    defaultRunTimeoutMs,
+    maxConcurrentPerProject,
   }
 }
 

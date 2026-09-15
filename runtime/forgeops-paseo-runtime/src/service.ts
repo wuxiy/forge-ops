@@ -6,6 +6,7 @@ import type { ExecutionRequest, ExecutionSnapshot, PaseoAdapter, PersistedRun, R
 /** Deep module boundary: all callers see only submit, inspect and cancel. */
 export class ExecutionService {
   private readonly submitting = new Map<string, Promise<ExecutionSnapshot>>()
+  private readonly projectGates = new Map<string, Promise<void>>()
 
   constructor(private readonly config: RuntimeConfig, private readonly store: RunStore, private readonly paseo: PaseoAdapter) {}
 
@@ -15,12 +16,37 @@ export class ExecutionService {
     if (inFlight) return inFlight
     const existing = this.store.get(input.idempotencyKey)
     if (existing) return toSnapshot(existing)
-    const submission = this.submitNew(input)
+    const submission = this.inProjectGate(input.projectId, async () => {
+      const durable = this.store.get(input.idempotencyKey)
+      if (durable) return toSnapshot(durable)
+      if (this.activeForProject(input.projectId) >= this.config.maxConcurrentPerProject) return queued(input.idempotencyKey)
+      return this.submitNew(input)
+    })
     this.submitting.set(input.idempotencyKey, submission)
     try {
       return await submission
     } finally {
       this.submitting.delete(input.idempotencyKey)
+    }
+  }
+
+  private activeForProject(projectId: string): number {
+    return this.store.all().filter((record) => record.projectId === projectId
+      && (record.state === 'SUBMITTING' || record.state === 'RUNNING')).length
+  }
+
+  private async inProjectGate<T>(projectId: string, action: () => Promise<T>): Promise<T> {
+    const previous = this.projectGates.get(projectId) ?? Promise.resolve()
+    let release: (() => void) | undefined
+    const current = new Promise<void>((resolve) => { release = resolve })
+    const gate = previous.then(() => current)
+    this.projectGates.set(projectId, gate)
+    await previous
+    try {
+      return await action()
+    } finally {
+      release?.()
+      if (this.projectGates.get(projectId) === gate) this.projectGates.delete(projectId)
     }
   }
 
@@ -33,6 +59,7 @@ export class ExecutionService {
       providerRunId: null,
       state: 'SUBMITTING',
       updatedAt: new Date().toISOString(),
+      deadlineAt: new Date(Date.now() + input.timeoutMs).toISOString(),
     }
     await this.store.save(pending)
     try {
@@ -51,6 +78,7 @@ export class ExecutionService {
   async inspect(idempotencyKey: string): Promise<ExecutionSnapshot | null> {
     const record = this.store.get(idempotencyKey)
     if (!record) return null
+    if (!terminal(record.state) && expired(record)) return this.timeout(record)
     if (!record.providerRunId || terminal(record.state)) return toSnapshot(record)
     try {
       const provider = await this.paseo.inspect(record.providerRunId)
@@ -79,6 +107,26 @@ export class ExecutionService {
       return toSnapshot(failed)
     }
   }
+
+  private async timeout(record: PersistedRun): Promise<ExecutionSnapshot> {
+    if (!record.providerRunId) {
+      const timedOut: PersistedRun = { ...record, state: 'TIMED_OUT', failureCategory: 'SUBMISSION_TIMEOUT', updatedAt: new Date().toISOString() }
+      await this.store.save(timedOut)
+      return toSnapshot(timedOut)
+    }
+    try {
+      await this.paseo.cancel(record.providerRunId)
+      const provider = await this.paseo.inspect(record.providerRunId)
+      if (!provider) return toSnapshot(record)
+      const state = mapState(provider.status)
+      if (state !== 'CANCELLED' && state !== 'TIMED_OUT') return toSnapshot(record)
+      const timedOut: PersistedRun = { ...record, state: 'TIMED_OUT', failureCategory: 'RUN_TIMEOUT', updatedAt: new Date().toISOString() }
+      await this.store.save(timedOut)
+      return toSnapshot(timedOut)
+    } catch {
+      return toSnapshot(record)
+    }
+  }
 }
 
 function validate(input: ExecutionRequest, config: RuntimeConfig): void {
@@ -86,6 +134,9 @@ function validate(input: ExecutionRequest, config: RuntimeConfig): void {
     throw new Error('idempotencyKey, projectId, cwd, prompt and outputSchema are required')
   }
   if (input.role !== 'TRIAGE' && input.role !== 'CODING') throw new Error('role must be TRIAGE or CODING')
+  if (!Number.isInteger(input.timeoutMs) || input.timeoutMs < 1 || input.timeoutMs > config.defaultRunTimeoutMs) {
+    throw new Error('timeoutMs must be a positive integer no greater than the Runtime limit')
+  }
   const cwd = resolve(input.cwd)
   if (!config.allowedRoots.some((root) => cwd.startsWith(`${root}/`) || cwd === root)) throw new Error('cwd is outside the configured project allowlist')
 }
@@ -100,6 +151,20 @@ function mapState(status: string | null): RunState {
 
 function terminal(state: RunState): boolean {
   return state === 'SUCCEEDED' || state === 'FAILED' || state === 'CANCELLED' || state === 'TIMED_OUT'
+}
+
+function queued(idempotencyKey: string): ExecutionSnapshot {
+  return {
+    idempotencyKey,
+    providerRunId: null,
+    state: 'QUEUED',
+    failureCategory: 'PROJECT_CONCURRENCY_LIMIT',
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+function expired(record: PersistedRun): boolean {
+  return Number.isFinite(Date.parse(record.deadlineAt)) && Date.parse(record.deadlineAt) <= Date.now()
 }
 
 function toSnapshot(record: PersistedRun, resultJson?: string, resultError?: string): ExecutionSnapshot {

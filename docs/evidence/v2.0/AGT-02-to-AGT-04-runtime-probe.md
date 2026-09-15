@@ -16,13 +16,15 @@
 自动化补充：
 
 - `pnpm --filter @forgeops/paseo-runtime typecheck`：通过；
-- `pnpm --filter @forgeops/paseo-runtime test`：2/2 通过，覆盖 Bearer 鉴权、路径隔离、10 次并发幂等、持久化重启恢复与取消；
+- `pnpm --filter @forgeops/paseo-runtime test`：4/4 通过，覆盖 Bearer 鉴权、路径隔离、10 次并发幂等、持久化重启恢复与取消、Paseo 确认取消后的超时，以及每项目容量释放后的持久队列恢复；
 - Runtime 对已完成的真实 Probe 读取 Paseo canonical timeline，合并 assistant 输出片段并得到规范化 JSON `{"decision":"ok"}`；输出只在受保护的 inspect 响应中返回，不写入 Runtime 本地状态文件；
 - 首次执行发现并修复并发请求返回 `SUBMITTING` 且缺少 Provider Run ID 的竞态；当前同 key 请求会等待首个提交完成。
+- Gateway 只把其受控的 `runTimeoutMillis` 传给 Runtime；Runtime 持久化截止时间，超时后发出取消并复查 Paseo 终态。达到每项目上限的 Run 保持 Gateway `QUEUED`，由 Reconciler 在容量释放后重新提交。
 
 未签收的项：
 
 - AGT-05 / AGT-06：Runtime 仅透传 `outputSchema`，尚未将 Triage/Coding 结果解析为受控状态机输入；
-- AGT-07 / AGT-08（超时部分）/ AGT-09 / AGT-11：尚未实现或在真实故障环境验证；
+- AGT-07 / AGT-09：尚未实现或在真实故障环境验证；
+- AGT-08 / AGT-11：实现及本地 Runtime 契约测试已通过，但真实 Paseo 的短时限取消和项目并发探针尚未执行，不能签收；
 - AGT-10 的两条 Coding Run 并发隔离、以及完整 base/commit/分支核验仍待真实试点；
 - AGT-12 与 Gateway、Outbox、`AgentRun` 的主链接入尚未完成。因此本文件不将整个 `AGT-*` 分组标记为通过。

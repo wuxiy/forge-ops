@@ -36,6 +36,7 @@ public class RuntimeHttpAgentExecution implements AgentExecution {
         body.put("cwd", request.cwd().toString());
         body.put("prompt", request.prompt());
         body.put("outputSchema", request.outputSchema());
+        body.put("timeoutMs", request.timeoutMillis());
         return exchange("POST", "/v1/runs", body);
     }
 

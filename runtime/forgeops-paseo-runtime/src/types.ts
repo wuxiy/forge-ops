@@ -1,5 +1,5 @@
 export type RunRole = 'TRIAGE' | 'CODING'
-export type RunState = 'SUBMITTING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'TIMED_OUT'
+export type RunState = 'QUEUED' | 'SUBMITTING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'TIMED_OUT'
 
 export interface ExecutionRequest {
   idempotencyKey: string
@@ -8,6 +8,7 @@ export interface ExecutionRequest {
   cwd: string
   prompt: string
   outputSchema: Record<string, unknown>
+  timeoutMs: number
 }
 
 export interface ExecutionSnapshot {
@@ -24,6 +25,7 @@ export interface PersistedRun extends ExecutionSnapshot {
   projectId: string
   role: RunRole
   cwd: string
+  deadlineAt: string
 }
 
 export interface PaseoAgentSnapshot {

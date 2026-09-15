@@ -22,6 +22,10 @@ export class RunStore {
     return this.records.get(idempotencyKey)
   }
 
+  all(): readonly PersistedRun[] {
+    return [...this.records.values()]
+  }
+
   async save(record: PersistedRun): Promise<void> {
     this.records.set(record.idempotencyKey, record)
     await mkdir(dirname(this.file), { recursive: true })
