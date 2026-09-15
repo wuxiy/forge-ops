@@ -24,6 +24,7 @@ class ProjectCatalogTest {
         catalog.reload();
 
         assertTrue(catalog.require("pilot").allowsPath(temp.resolve("repo").resolve("src")));
+        assertEquals("pilot", catalog.resolveGitHubRepository("example/pilot").orElseThrow().id());
 
         Files.writeString(project, valid("pilot").replace("autoMerge: false", "autoMerge: true"));
         assertThrows(IllegalStateException.class, catalog::reload);
@@ -59,6 +60,12 @@ class ProjectCatalogTest {
                 policy:
                   autoMerge: false
                   productionDeploy: false
-                """.formatted(id);
+                github:
+                  repository: example/%s
+                  baseBranch: main
+                  allowedMergeLogins:
+                    - forgeops-owner
+                  testEnvironment: test
+                """.formatted(id, id);
     }
 }

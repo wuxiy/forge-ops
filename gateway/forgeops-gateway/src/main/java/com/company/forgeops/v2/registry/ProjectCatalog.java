@@ -21,8 +21,10 @@ import org.yaml.snakeyaml.Yaml;
 public class ProjectCatalog {
 
     private static final Set<String> TOP_LEVEL_FIELDS = Set.of("id", "enabled", "repositoryRoot", "allowedPaths",
-            "browserOrigins", "policy");
+            "browserOrigins", "policy", "github");
     private static final Set<String> POLICY_FIELDS = Set.of("autoMerge", "productionDeploy");
+    private static final Set<String> GITHUB_FIELDS = Set.of("repository", "baseBranch", "allowedMergeLogins",
+            "testEnvironment");
 
     private final RegistryProperties properties;
     private final AtomicReference<Map<String, ResolvedProject>> projects = new AtomicReference<>(Map.of());
@@ -66,6 +68,11 @@ public class ProjectCatalog {
         return Optional.ofNullable(projects.get().get(projectId));
     }
 
+    public Optional<ResolvedProject> resolveGitHubRepository(String repository) {
+        return projects.get().values().stream().filter(project -> project.github().repository().equals(repository))
+                .findFirst();
+    }
+
     private ResolvedProject parse(Path file, Path workspaceRoot) {
         Map<String, Object> root;
         try (InputStream stream = Files.newInputStream(file)) {
@@ -95,7 +102,20 @@ public class ProjectCatalog {
         if (requireBoolean(policy, "autoMerge", file) || requireBoolean(policy, "productionDeploy", file)) {
             throw new IllegalStateException("project policy cannot relax the global human gate: " + file);
         }
-        return new ResolvedProject(id, repositoryRoot, List.copyOf(allowedPaths), browserOrigins);
+        Map<String, Object> github = requireObject(root, "github", file);
+        rejectUnknown(github, GITHUB_FIELDS, file + " github");
+        String repository = requireString(github, "repository", file);
+        if (!repository.matches("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")) {
+            throw new IllegalStateException("github.repository must be owner/name: " + file);
+        }
+        String baseBranch = requireString(github, "baseBranch", file);
+        String testEnvironment = requireString(github, "testEnvironment", file);
+        Set<String> allowedMergeLogins = Set.copyOf(requireStringList(github, "allowedMergeLogins", file));
+        if (allowedMergeLogins.stream().anyMatch(login -> !login.matches("[A-Za-z0-9-]+"))) {
+            throw new IllegalStateException("github.allowedMergeLogins contains an invalid login: " + file);
+        }
+        return new ResolvedProject(id, repositoryRoot, List.copyOf(allowedPaths), browserOrigins,
+                new ResolvedProject.GitHubDelivery(repository, baseBranch, allowedMergeLogins, testEnvironment));
     }
 
     private static Path absoluteDirectory(String value, String field) {
