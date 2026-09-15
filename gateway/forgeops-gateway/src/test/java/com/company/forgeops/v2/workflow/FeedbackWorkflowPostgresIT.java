@@ -6,6 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import com.company.forgeops.v2.feedback.domain.ContextSnapshotRepository;
 import com.company.forgeops.v2.feedback.domain.FeedbackCycleRepository;
 import com.company.forgeops.v2.feedback.domain.FeedbackRepository;
+import com.company.forgeops.v2.agent.domain.AgentRole;
+import com.company.forgeops.v2.agent.domain.AgentRunRepository;
+import com.company.forgeops.v2.agent.domain.AgentRunState;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -39,6 +42,9 @@ class FeedbackWorkflowPostgresIT {
 
     @Autowired
     private ContextSnapshotRepository snapshots;
+
+    @Autowired
+    private AgentRunRepository agentRuns;
 
     @Test
     void createsCycleOneAndReopenCreatesAnIndependentCycleTwo() {
@@ -96,6 +102,26 @@ class FeedbackWorkflowPostgresIT {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void retryCreatesANewImmutableAttemptForTheCurrentCycle() {
+        var feedback = workflow.submit(new SubmitFeedbackCommand("retry-" + UUID.randomUUID(), "subject", "title", "description",
+                "{\"safe\":true}", "f".repeat(64), 0, "retry-it"));
+        var first = agentRuns.findByFeedbackId(feedback.getId()).getFirst();
+        workflow.recordRuntimeSubmission(first.getId(), "provider-retry-" + UUID.randomUUID(), "retry-it");
+        workflow.recordRuntimeFailure(first.getId(), AgentRunState.FAILED, "PASEO_ERROR", "retry-it");
+
+        feedback = workflow.retry(feedback.getId(), AgentRole.TRIAGE, "subject", "retry-it");
+        var attempts = agentRuns.findByFeedbackId(feedback.getId()).stream()
+                .sorted(java.util.Comparator.comparingInt(run -> run.getAttempt())).toList();
+
+        assertEquals(FeedbackState.TRIAGE_QUEUED, feedback.getState());
+        assertEquals(2, attempts.size());
+        assertEquals(1, attempts.getFirst().getAttempt());
+        assertEquals(AgentRunState.FAILED, attempts.getFirst().getState());
+        assertEquals(2, attempts.getLast().getAttempt());
+        assertEquals(AgentRunState.QUEUED, attempts.getLast().getState());
     }
 
     private com.company.forgeops.v2.feedback.domain.Feedback advanceToWaitingVerify(

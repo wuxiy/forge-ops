@@ -12,13 +12,13 @@
 | WF-02 | `FeedbackWorkflow.submit` 在真实 PostgreSQL 创建 Cycle 1、绑定 `current_cycle_id`、创建 Context Snapshot，并持久化 `CONTEXT_READY` | PASS |
 | WF-03 | 同一案例连续两次 Reopen，真实创建 Cycle 2、Cycle 3；三份 Context Snapshot 分别绑定各 Cycle | PASS |
 | WF-04 | 集成测试验证 Cycle 1/2/3 的 snapshot 各为一条、ID 不复用；新 Cycle 成为唯一 current cycle | PASS（Context/Cycle 范围） |
+| WF-05 | Triage Run 在真实 PostgreSQL 失败后，重试创建同一 Cycle 的 attempt 2；attempt 1 保持 `FAILED`，attempt 2 为新的 `QUEUED` Run 与新的 Outbox 事实 | PASS |
 | WF-06 / WF-07 | 状态矩阵测试覆盖 18 × 18 = 324 种迁移；合法迁移允许，其他组合被拒绝 | PASS |
 | WF-11 | 用户可见状态只由 `FeedbackState.userVisibleStatus()` 纯映射产生，数据库无第二个 display-state 字段 | PASS |
 | WF-12 | 对同一项目先创建种子反馈，再并发提交 100 条；真实 PostgreSQL 测试得到不重复且连续的 1002–1101 编号 | PASS |
 
 尚不能签收的项目：
 
-- WF-05（Run retry）等待 Phase 5 的 Runtime 提交和 attempt 调度；
 - WF-08（各类失败恢复）需要 Phase 2/5/6 的真实故障来源；
 - WF-09（同一 Feedback 并发推进）需 API 命令与并发版本冲突测试；
 - WF-10（终态事件重放）依赖 Phase 2 Inbox。

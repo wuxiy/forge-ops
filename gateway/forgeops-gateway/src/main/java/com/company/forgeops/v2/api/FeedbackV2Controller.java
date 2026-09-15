@@ -6,6 +6,7 @@ import com.company.forgeops.v2.context.PreparedContext;
 import com.company.forgeops.v2.feedback.domain.Feedback;
 import com.company.forgeops.v2.feedback.domain.FeedbackRepository;
 import com.company.forgeops.v2.registry.ProjectCatalog;
+import com.company.forgeops.v2.agent.domain.AgentRole;
 import com.company.forgeops.v2.security.CallerIdentity;
 import com.company.forgeops.v2.security.ProjectToken;
 import com.company.forgeops.v2.workflow.FeedbackWorkflow;
@@ -81,6 +82,15 @@ public class FeedbackV2Controller {
                 context.sha256(), context.redactionCount(), request.traceId()));
     }
 
+    @PostMapping("/{feedbackId}/retry")
+    public FeedbackView retry(@PathVariable String projectId, @PathVariable UUID feedbackId, @RequestBody RetryRequest request) {
+        ProjectToken identity = authorize(projectId, "feedback:retry", feedbackId);
+        Feedback feedback = feedbacks.findByIdAndProjectId(feedbackId, projectId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        requireOwner(identity, feedback);
+        return FeedbackView.from(workflow.retry(feedbackId, request.role(), identity.subject(), request.traceId()));
+    }
+
     private ProjectToken authorize(String projectId, String scope, UUID feedbackId) {
         ProjectToken identity = CallerIdentity.require();
         if (catalog.resolve(projectId).isEmpty() || !identity.projectId().equals(projectId) || !identity.allows(scope)) {
@@ -103,6 +113,9 @@ public class FeedbackV2Controller {
     }
 
     public record ReopenRequest(String reason, String traceId) {
+    }
+
+    public record RetryRequest(AgentRole role, String traceId) {
     }
 
     public record FeedbackView(UUID id, long displayNo, String state) {

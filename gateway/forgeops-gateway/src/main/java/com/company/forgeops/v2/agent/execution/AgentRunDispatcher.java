@@ -73,6 +73,10 @@ public class AgentRunDispatcher {
                 dispatch(agentRunId);
             } catch (RuntimeUnavailableException unavailable) {
                 // Keep the durable queue untouched; the next reconciliation cycle retries it.
+            } catch (IllegalArgumentException invalidConfiguration) {
+                // A removed/invalid Registry entry cannot recover by retrying; fail the workflow closed once.
+                workflow.recordRuntimeFailure(agentRunId, AgentRunState.FAILED, "EXECUTION_CONFIGURATION_INVALID",
+                        "reconciler:" + agentRunId);
             }
         });
         return queued.size();

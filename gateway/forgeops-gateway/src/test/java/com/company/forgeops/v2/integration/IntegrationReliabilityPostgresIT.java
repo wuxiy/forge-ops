@@ -55,6 +55,9 @@ class IntegrationReliabilityPostgresIT {
     @Autowired
     private AgentRunRepository agentRuns;
 
+    @Autowired
+    private Reconciler reconciler;
+
     @Test
     void missingExternalEventIdIsRejectedAndRepeatedEventIsOneDurableFact() throws Exception {
         assertThrows(IllegalArgumentException.class,
@@ -113,5 +116,19 @@ class IntegrationReliabilityPostgresIT {
 
         assertEquals(feedbackBefore, feedbacks.count());
         assertEquals(outboxBefore, outboxEvents.count());
+    }
+
+    @Test
+    void reconciliationFailsClosedWhenAQueuedRunReferencesAnUnavailableProject() {
+        var feedback = workflow.submit(new SubmitFeedbackCommand("unknown-project-" + UUID.randomUUID(), "subject", "title",
+                "description", "{\"safe\":true}", "a".repeat(64), 0, "unknown-project-trace"));
+
+        reconciler.reconcile();
+
+        var run = agentRuns.findByFeedbackId(feedback.getId()).getFirst();
+        assertEquals(com.company.forgeops.v2.agent.domain.AgentRunState.FAILED, run.getState());
+        assertEquals("EXECUTION_CONFIGURATION_INVALID", run.getFailureCategory());
+        assertEquals(com.company.forgeops.v2.workflow.FeedbackState.TRIAGE_FAILED,
+                feedbacks.findById(feedback.getId()).orElseThrow().getState());
     }
 }
