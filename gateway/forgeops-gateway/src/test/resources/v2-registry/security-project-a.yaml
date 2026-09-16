@@ -6,7 +6,6 @@ allowedPaths:
 browserOrigins:
   - https://app.test
 policy:
-  autoMerge: false
   productionDeploy: false
 github:
   repository: example/security-project-a
@@ -15,3 +14,6 @@ github:
     - forgeops-test-owner
   requiredCheckName: forgeops-test
   testEnvironment: test
+qualityPolicy:
+  categoryMappings:
+    forgeops-test: BUILD

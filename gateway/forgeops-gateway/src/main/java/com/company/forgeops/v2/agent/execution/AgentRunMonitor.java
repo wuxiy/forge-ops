@@ -6,6 +6,7 @@ import com.company.forgeops.v2.agent.domain.AgentRunRepository;
 import com.company.forgeops.v2.agent.domain.AgentRunState;
 import com.company.forgeops.v2.workflow.FeedbackWorkflow;
 import com.company.forgeops.v2.verification.DeliveryEvidenceService;
+import com.company.forgeops.v2.verification.VerificationService;
 import tools.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -18,14 +19,16 @@ public class AgentRunMonitor {
     private final AgentExecution execution;
     private final FeedbackWorkflow workflow;
     private final DeliveryEvidenceService deliveryEvidence;
+    private final VerificationService verification;
     private final ObjectMapper json;
 
     public AgentRunMonitor(AgentRunRepository runs, AgentExecution execution, FeedbackWorkflow workflow,
-            DeliveryEvidenceService deliveryEvidence, ObjectMapper json) {
+            DeliveryEvidenceService deliveryEvidence, VerificationService verification, ObjectMapper json) {
         this.runs = runs;
         this.execution = execution;
         this.workflow = workflow;
         this.deliveryEvidence = deliveryEvidence;
+        this.verification = verification;
         this.json = json;
     }
 
@@ -50,7 +53,38 @@ public class AgentRunMonitor {
             return;
         }
         if (snapshot.state() != AgentRunState.SUCCEEDED) {
+            if (run.getRole().isVerificationFamily()) {
+                workflow.recordRuntimeFailure(run.getId(), snapshot.state(), failureCategory(snapshot), "monitor:" + run.getId());
+                verification.onPlannerFailure(run.getId(), snapshot.state(), failureCategory(snapshot),
+                        "monitor:" + run.getId());
+                return;
+            }
             workflow.recordRuntimeFailure(run.getId(), snapshot.state(), failureCategory(snapshot), "monitor:" + run.getId());
+            return;
+        }
+        if (run.getRole() == AgentRole.VERIFICATION) {
+            try {
+                var result = AgentContracts.parseVerificationPlan(json, snapshot.resultJson());
+                workflow.recordVerificationPlannerOutput(run.getId(),
+                        AgentContracts.canonicalVerificationPlanJson(json, result), "monitor:" + run.getId());
+                verification.onPlannerResult(run.getId(), result, snapshot.resultJson(), "monitor:" + run.getId());
+            } catch (IllegalArgumentException invalid) {
+                workflow.recordRuntimeFailure(run.getId(), AgentRunState.INVALID_OUTPUT, "INVALID_PLAN_OUTPUT",
+                        "monitor:" + run.getId());
+                verification.onPlannerFailure(run.getId(), AgentRunState.INVALID_OUTPUT, "INVALID_PLAN_OUTPUT",
+                        "monitor:" + run.getId());
+            }
+            return;
+        }
+        if (run.getRole() == AgentRole.FAILURE_ANALYSIS) {
+            try {
+                var result = AgentContracts.parseFailureTriage(json, snapshot.resultJson());
+                workflow.recordVerificationPlannerOutput(run.getId(),
+                        AgentContracts.canonicalFailureTriageJson(json, result), "monitor:" + run.getId());
+            } catch (IllegalArgumentException invalid) {
+                workflow.recordRuntimeFailure(run.getId(), AgentRunState.INVALID_OUTPUT, "INVALID_FAILURE_TRIAGE_OUTPUT",
+                        "monitor:" + run.getId());
+            }
             return;
         }
         if (run.getRole() == AgentRole.CODING) {

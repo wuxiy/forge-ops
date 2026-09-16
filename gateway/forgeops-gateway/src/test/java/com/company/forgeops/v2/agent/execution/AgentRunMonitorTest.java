@@ -32,7 +32,9 @@ class AgentRunMonitorTest {
                 AgentRunState.SUCCEEDED, null,
                 "{\"outcome\":\"PR_CREATED\",\"branch\":\"forgeops/v2-fix\",\"commitSha\":\"abc123\",\"prUrl\":\"https://example.invalid/pr/1\",\"changedFiles\":[\"src/App.java\"],\"tests\":[\"mvn test\"],\"risks\":[],\"failureCategory\":null,\"failureMessage\":null}", null));
 
-        new AgentRunMonitor(runs, execution, workflow, deliveryEvidence, JsonMapper.shared()).inspectRunning();
+        new AgentRunMonitor(runs, execution, workflow, deliveryEvidence,
+                Mockito.mock(com.company.forgeops.v2.verification.VerificationService.class),
+                JsonMapper.shared()).inspectRunning();
 
         verify(deliveryEvidence).registerCodingPrDeclaration(eq(run.getId()),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),

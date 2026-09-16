@@ -8,6 +8,7 @@ COPY gateway/forgeops-gateway ./gateway/forgeops-gateway
 RUN cd gateway/forgeops-gateway && mvn -q -DskipTests package
 
 FROM eclipse-temurin:21-jre
+RUN apt-get update && apt-get install -y --no-install-recommends curl git && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /src/gateway/forgeops-gateway/target/*.jar app.jar
 EXPOSE 8080

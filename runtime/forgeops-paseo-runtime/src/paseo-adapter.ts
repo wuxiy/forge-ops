@@ -21,7 +21,7 @@ export class PaseoSdkAdapter implements PaseoAdapter {
 
   async create(input: ExecutionRequest): Promise<PaseoAgentSnapshot> {
     await this.connect()
-    const agent = await this.client.agents.create({
+    const submitted = await this.withConnectionGuard(this.client.agents.create({
       config: { provider: this.config.provider },
       cwd: input.cwd,
       prompt: input.prompt,
@@ -32,8 +32,9 @@ export class PaseoSdkAdapter implements PaseoAdapter {
         mode: 'branch-off',
         newBranch: worktreeBranch(input),
       },
-    })
-    return snapshot(agent.current() ?? await agent.refresh().then((value) => value?.agent ?? null), agent.id)
+    }))
+    const agent = submitted.current() ?? await submitted.refresh().then((value) => value?.agent ?? null)
+    return snapshot(agent, submitted.id)
   }
 
   async inspect(providerRunId: string): Promise<PaseoAgentSnapshot | null> {
@@ -71,9 +72,27 @@ export class PaseoSdkAdapter implements PaseoAdapter {
 
   private async connect(): Promise<void> {
     if (this.connected) return
-    await this.client.connect()
-    await this.daemon.connect()
+    await this.withConnectionGuard(this.client.connect())
+    await this.withConnectionGuard(this.daemon.connect())
     this.connected = true
+  }
+
+  /**
+   * AGT-09: a daemon that is down must surface as a bounded failure, never an indefinite hang.
+   * The service layer turns the rejection into a durable FAILED/PASEO_SUBMIT_FAILED fact.
+   */
+  private async withConnectionGuard<T>(operation: Promise<T>, timeoutMs = 5_000): Promise<T> {
+    let timer: NodeJS.Timeout | undefined
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('PASEO_CONNECT_TIMEOUT')), timeoutMs)
+        }),
+      ])
+    } finally {
+      clearTimeout(timer)
+    }
   }
 }
 

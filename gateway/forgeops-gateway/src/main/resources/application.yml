@@ -27,6 +27,27 @@ forgeops:
       webhook-secret: ${FORGEOPS_V2_GITHUB_WEBHOOK_SECRET:}
       api-base-url: ${FORGEOPS_V2_GITHUB_API_BASE_URL:https://api.github.com}
       api-token: ${FORGEOPS_V2_GITHUB_API_TOKEN:}
+      machine-merge-token: ${FORGEOPS_V2_GITHUB_MACHINE_MERGE_TOKEN:}
+      machine-merge-login: ${FORGEOPS_V2_GITHUB_MACHINE_MERGE_LOGIN:forgeops-machine}
+    verification:
+      planner-enabled: ${FORGEOPS_V2_PLANNER_ENABLED:true}
+      planner-max-attempts: ${FORGEOPS_V2_PLANNER_MAX_ATTEMPTS:2}
+      planner-budget-per-cycle: ${FORGEOPS_V2_PLANNER_BUDGET:2}
+      executor-enabled: ${FORGEOPS_V2_EXECUTOR_ENABLED:false}
+      executor-task-root: ${FORGEOPS_V2_EXECUTOR_TASK_ROOT:/var/lib/forgeops/executor}
+      executor-allowed-images: ${FORGEOPS_V2_EXECUTOR_IMAGES:}
+    reconciliation:
+      fixed-delay-ms: ${FORGEOPS_V2_RECONCILIATION_MS:5000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
 
 logging:
   level:

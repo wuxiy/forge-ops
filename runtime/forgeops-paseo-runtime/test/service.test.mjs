@@ -187,3 +187,65 @@ test('leaves excess runs queued until a project capacity slot is free', async ()
   assert.equal(adapter.creations, 2)
   await runtime.close()
 })
+
+test('VER-07 verification-family roles accept only isolated task directories, never repository worktrees', async () => {
+  const tasks = await mkdtemp(join(tmpdir(), 'forgeops-runtime-tasks-'))
+  after(() => rm(tasks, { recursive: true, force: true }))
+  const dataFile = join(tasks, 'runs.json')
+  const runtimeConfig = { ...config(dataFile), taskRoots: [tasks] }
+  const adapter = new FakePaseo()
+  const runtime = await startServer(runtimeConfig, adapter)
+  try {
+    const address = runtime.server.address()
+    assert.equal(typeof address, 'object')
+    const baseUrl = `http://127.0.0.1:${address.port}`
+
+    const verificationPayload = (key, cwd, projectId = 'pilot-project') => (
+      { ...payload(key, cwd), role: 'VERIFICATION', projectId })
+
+    // A repository worktree inside allowedRoots is still forbidden for verification-family roles.
+    const repoWorktree = await request(baseUrl, '/v1/runs', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(verificationPayload('ver-repo', root)),
+    })
+    assert.equal(repoWorktree.status, 400)
+    // The bare task root itself is refused; only a dedicated sub-directory is accepted.
+    const bareRoot = await request(baseUrl, '/v1/runs', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(verificationPayload('ver-bare', tasks)),
+    })
+    assert.equal(bareRoot.status, 400)
+    const dedicated = await request(baseUrl, '/v1/runs', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(verificationPayload('ver-task', join(tasks, 'plan-1'))),
+    })
+    assert.equal(dedicated.status, 202)
+    assert.equal(adapter.creations, 1)
+    const failureAnalysis = await request(baseUrl, '/v1/runs', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(verificationPayload('fa-task', join(tasks, 'plan-2'), 'pilot-project-b')),
+    })
+    assert.equal(failureAnalysis.status, 202)
+    assert.equal(adapter.creations, 2)
+  } finally {
+    await runtime.close()
+  }
+})
+
+test('AGT-09 a daemon outage queues the run instead of failing the workflow', async () => {
+  const offline = new FakePaseo()
+  offline.create = async () => { throw new Error('PASEO_CONNECT_TIMEOUT') }
+  const runtime = await startServer(config(join(root, 'offline.json')), offline)
+  const address = runtime.server.address()
+  assert.equal(typeof address, 'object')
+  const baseUrl = `http://127.0.0.1:${address.port}`
+  const submitted = await request(baseUrl, '/v1/runs', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload('evt-offline')),
+  })
+  assert.equal(submitted.status, 202)
+  const snapshot = await submitted.json()
+  assert.equal(snapshot.state, 'QUEUED')
+  assert.equal(snapshot.failureCategory, 'PASEO_UNAVAILABLE')
+  await runtime.close()
+})

@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import com.company.forgeops.v2.observability.ForgeOpsMetrics;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -22,11 +23,14 @@ public class OutboxDispatcher {
     private final OutboxEventRepository events;
     private final OutboxPublisher publisher;
     private final TransactionTemplate transactions;
+    private final ForgeOpsMetrics metrics;
 
-    public OutboxDispatcher(OutboxEventRepository events, OutboxPublisher publisher, TransactionTemplate transactions) {
+    public OutboxDispatcher(OutboxEventRepository events, OutboxPublisher publisher, TransactionTemplate transactions,
+            ForgeOpsMetrics metrics) {
         this.events = events;
         this.publisher = publisher;
         this.transactions = transactions;
+        this.metrics = metrics;
     }
 
     public int dispatchDue() {
@@ -88,6 +92,7 @@ public class OutboxDispatcher {
     }
 
     private void markFailed(java.util.UUID eventId, RuntimeException error) {
+        metrics.outboxRetry();
         OffsetDateTime now = OffsetDateTime.now();
         OutboxEvent event = events.findById(eventId).orElseThrow();
         long seconds = Math.min(300, 1L << Math.min(8, event.getAttempts()));

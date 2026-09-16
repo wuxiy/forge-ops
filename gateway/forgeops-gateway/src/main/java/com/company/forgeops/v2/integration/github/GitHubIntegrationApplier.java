@@ -6,6 +6,7 @@ import com.company.forgeops.v2.integration.domain.IntegrationEvent;
 import com.company.forgeops.v2.integration.inbox.IntegrationApplier;
 import com.company.forgeops.v2.registry.ProjectCatalog;
 import com.company.forgeops.v2.registry.ResolvedProject;
+import com.company.forgeops.v2.verification.VerificationService;
 import com.company.forgeops.v2.verification.domain.DeliveryEvidence;
 import com.company.forgeops.v2.verification.domain.DeliveryEvidenceRepository;
 import com.company.forgeops.v2.verification.domain.DeliveryEvidenceState;
@@ -31,19 +32,26 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
             "checkRunName", "pullRequestNo", "headSha", "status", "conclusion");
     private static final Set<String> DEPLOYMENT_STATUS_FIELDS = Set.of("payloadSha256", "repository", "action",
             "deploymentId", "deploymentStatusId", "pullRequestNo", "headSha", "environment", "state");
+    private static final Set<String> WORKFLOW_RUN_FIELDS = Set.of("payloadSha256", "repository", "action",
+            "workflowName", "workflowId", "branch", "headSha", "status", "runNumber", "conclusion");
 
     private final DeliveryEvidenceRepository evidence;
     private final ProjectCatalog catalog;
     private final FeedbackWorkflow workflow;
     private final FeedbackRepository feedbacks;
+    private final VerificationService verification;
+    private final GitHubWebhookProperties github;
     private final ObjectMapper json;
 
     public GitHubIntegrationApplier(DeliveryEvidenceRepository evidence, ProjectCatalog catalog, FeedbackWorkflow workflow,
-            FeedbackRepository feedbacks, ObjectMapper json) {
+            FeedbackRepository feedbacks, VerificationService verification, GitHubWebhookProperties github,
+            ObjectMapper json) {
         this.evidence = evidence;
         this.catalog = catalog;
         this.workflow = workflow;
         this.feedbacks = feedbacks;
+        this.verification = verification;
+        this.github = github;
         this.json = json;
     }
 
@@ -56,6 +64,7 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
             case "PULL_REQUEST" -> applyPullRequest(event);
             case "CHECK_RUN" -> applyCheckRun(event);
             case "DEPLOYMENT_STATUS" -> applyDeploymentStatus(event);
+            case "WORKFLOW_RUN" -> applyWorkflowRun(event);
             default -> ApplyResult.deferred("No verified handler is registered for " + event.getEventType());
         };
     }
@@ -67,6 +76,12 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
         } catch (IllegalArgumentException invalid) {
             return ApplyResult.rejected("GitHub pull request fact is invalid");
         }
+        if ("synchronize".equals(delivery.action())) {
+            // VER-02: a new push expires open plans; evidence for the old head can never be re-used.
+            verification.onPullRequestSynchronized(delivery.repository(), delivery.number(), delivery.headSha(),
+                    "github:" + event.getExternalEventId());
+            return ApplyResult.applied();
+        }
         if (!"closed".equals(delivery.action()) || !delivery.merged()) {
             return ApplyResult.applied();
         }
@@ -74,7 +89,11 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
         if (project == null) {
             return ApplyResult.rejected("GitHub repository does not match the registered project");
         }
-        if (delivery.mergedBy() == null || !project.github().allowedMergeLogins().contains(delivery.mergedBy())) {
+        boolean humanMerge = delivery.mergedBy() != null
+                && project.github().allowedMergeLogins().contains(delivery.mergedBy());
+        boolean machineMerge = delivery.mergedBy() != null
+                && github.getMachineMergeLogin().equals(delivery.mergedBy());
+        if (!humanMerge && !machineMerge) {
             return ApplyResult.rejected("GitHub merge actor is not authorized");
         }
         DeliveryEvidence match = verifiedEvidence(event, delivery.repository(), delivery.number(), delivery.headSha());
@@ -91,14 +110,15 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
         if (feedback.getState() == FeedbackState.BUILD_RUNNING) {
             return ApplyResult.applied();
         }
-        if (feedback.getState() == FeedbackState.CODE_RUNNING) {
-            return ApplyResult.deferred("GitHub merge arrived before the verified PR became ready");
+        if (feedback.getState() == FeedbackState.CODE_RUNNING || feedback.getState() == FeedbackState.PR_READY
+                || feedback.getState() == FeedbackState.VERIFY_RUNNING) {
+            return ApplyResult.deferred("GitHub merge arrived before the verification gate decided");
         }
-        if (feedback.getState() != FeedbackState.PR_READY) {
+        if (feedback.getState() != FeedbackState.GATE_PASS) {
             return ApplyResult.rejected("GitHub merge is not current for this Feedback state");
         }
-        workflow.recordAuthorizedMerge(match.getFeedbackId(), match.getCycleId(), match.getAgentRunId(), delivery.mergedBy(),
-                "github:" + event.getExternalEventId());
+        workflow.recordAuthorizedMerge(match.getFeedbackId(), match.getCycleId(), match.getAgentRunId(),
+                delivery.mergedBy(), "github:" + event.getExternalEventId());
         return ApplyResult.applied();
     }
 
@@ -112,9 +132,6 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
         ResolvedProject project = registeredProject(event, delivery.repository());
         if (project == null) {
             return ApplyResult.rejected("GitHub repository does not match the registered project");
-        }
-        if (!project.github().requiredCheckName().equals(delivery.checkRunName())) {
-            return ApplyResult.rejected("GitHub check run is not the configured delivery check");
         }
         if (!"completed".equals(delivery.action()) || !"completed".equals(delivery.status())) {
             return ApplyResult.applied();
@@ -130,11 +147,22 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
         if (feedback == null) {
             return ApplyResult.rejected("GitHub check run belongs to an expired Feedback cycle");
         }
+        // VER-03: a check arriving while the gate is open is PR-phase verification evidence, never build evidence.
+        if (feedback.getState() == FeedbackState.VERIFY_RUNNING || feedback.getState() == FeedbackState.VERIFY_FAILED) {
+            boolean accepted = verification.onCheckRunEvidence(feedback.getId(), feedback.getCurrentCycleId(),
+                    delivery.checkRunName(), delivery.checkRunId(), delivery.headSha(), delivery.conclusion(),
+                    event.getPayloadJson(), "github:" + event.getExternalEventId());
+            return accepted ? ApplyResult.applied() : ApplyResult.rejected("GitHub check run cannot gate this PR");
+        }
+        if (!project.github().requiredCheckName().equals(delivery.checkRunName())) {
+            return ApplyResult.rejected("GitHub check run is not the configured delivery check");
+        }
         boolean succeeded = "success".equals(delivery.conclusion());
         if (feedback.getState() == FeedbackState.BUILD_FAILED && !succeeded) {
             return ApplyResult.applied();
         }
-        if (feedback.getState() == FeedbackState.PR_READY) {
+        if (feedback.getState() == FeedbackState.PR_READY || feedback.getState() == FeedbackState.VERIFY_RUNNING
+                || feedback.getState() == FeedbackState.GATE_PASS) {
             return ApplyResult.deferred("GitHub check run arrived before the authorized merge");
         }
         if (feedback.getState() != FeedbackState.BUILD_RUNNING
@@ -176,7 +204,9 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
         if (feedback.getState() == FeedbackState.DEPLOY_FAILED && !succeeded) {
             return ApplyResult.applied();
         }
-        if (feedback.getState() == FeedbackState.PR_READY || feedback.getState() == FeedbackState.BUILD_RUNNING
+        if (feedback.getState() == FeedbackState.PR_READY || feedback.getState() == FeedbackState.VERIFY_RUNNING
+                || feedback.getState() == FeedbackState.GATE_PASS
+                || feedback.getState() == FeedbackState.BUILD_RUNNING
                 || feedback.getState() == FeedbackState.BUILD_FAILED) {
             return ApplyResult.deferred("GitHub deployment arrived before a successful delivery build");
         }
@@ -186,6 +216,29 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
         }
         workflow.recordDeploymentEvidence(match.getFeedbackId(), match.getCycleId(), match.getAgentRunId(), succeeded,
                 "github:" + event.getExternalEventId());
+        return ApplyResult.applied();
+    }
+
+    /** VER-26: scheduled full-suite runs are provider-signed nightly facts; the recall breaker consumes them. */
+    private ApplyResult applyWorkflowRun(IntegrationEvent event) {
+        WorkflowRunDelivery delivery;
+        try {
+            delivery = parseWorkflowRun(event.getPayloadJson());
+        } catch (IllegalArgumentException invalid) {
+            return ApplyResult.rejected("GitHub workflow run fact is invalid");
+        }
+        ResolvedProject project = registeredProject(event, delivery.repository());
+        if (project == null) {
+            return ApplyResult.rejected("GitHub repository does not match the registered project");
+        }
+        if (!"completed".equals(delivery.status())) {
+            return ApplyResult.applied();
+        }
+        if (delivery.conclusion() == null) {
+            return ApplyResult.rejected("A completed workflow run must have a conclusion");
+        }
+        verification.onScheduledWorkflowRun(project, delivery.workflowName(), delivery.branch(), delivery.headSha(),
+                delivery.conclusion(), event.getPayloadJson(), "github:" + event.getExternalEventId());
         return ApplyResult.applied();
     }
 
@@ -229,6 +282,13 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
         return new DeploymentStatusDelivery(text(root, "repository"), text(root, "action"),
                 positiveNumber(root, "deploymentId"), positiveNumber(root, "deploymentStatusId"),
                 positiveNumber(root, "pullRequestNo"), text(root, "headSha"), text(root, "environment"), text(root, "state"));
+    }
+
+    private WorkflowRunDelivery parseWorkflowRun(String payloadJson) {
+        JsonNode root = parseObject(payloadJson, WORKFLOW_RUN_FIELDS);
+        return new WorkflowRunDelivery(text(root, "repository"), text(root, "action"), text(root, "workflowName"),
+                positiveNumber(root, "workflowId"), text(root, "branch"), text(root, "headSha"), text(root, "status"),
+                positiveNumber(root, "runNumber"), nullableText(root, "conclusion"));
     }
 
     private JsonNode parseObject(String payloadJson, Set<String> expectedFields) {
@@ -287,5 +347,9 @@ public class GitHubIntegrationApplier implements IntegrationApplier {
 
     private record DeploymentStatusDelivery(String repository, String action, long deploymentId, long deploymentStatusId,
             long pullRequestNo, String headSha, String environment, String state) {
+    }
+
+    private record WorkflowRunDelivery(String repository, String action, String workflowName, long workflowId,
+            String branch, String headSha, String status, long runNumber, String conclusion) {
     }
 }

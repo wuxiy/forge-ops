@@ -33,6 +33,7 @@ public class GitHubWebhookNormalizer {
                 case "pull_request" -> pullRequest(root, payload);
                 case "check_run" -> checkRun(root, payload);
                 case "deployment_status" -> deploymentStatus(root, payload);
+                case "workflow_run" -> workflowRun(root, payload);
                 default -> throw new IllegalArgumentException("Unsupported GitHub event: " + event);
             }
             return new NormalizedWebhook(event.toUpperCase().replace('-', '_'), repository, json.writeValueAsString(payload));
@@ -68,6 +69,18 @@ public class GitHubWebhookNormalizer {
         payload.put("headSha", text(root, "check_run", "head_sha"));
         payload.put("status", text(root, "check_run", "status"));
         nullableText(root, payload, "conclusion", "check_run", "conclusion");
+    }
+
+    /** ADR-0009 scheduled facts bind repo+branch+commit+workflow and carry no feedback binding. */
+    private static void workflowRun(JsonNode root, Map<String, Object> payload) {
+        payload.put("action", text(root, "action"));
+        payload.put("workflowName", text(root, "workflow_run", "name"));
+        payload.put("workflowId", positiveNumber(root, "workflow_run", "id"));
+        payload.put("branch", text(root, "workflow_run", "head_branch"));
+        payload.put("headSha", text(root, "workflow_run", "head_sha"));
+        payload.put("status", text(root, "workflow_run", "status"));
+        payload.put("runNumber", positiveNumber(root, "workflow_run", "run_number"));
+        nullableText(root, payload, "conclusion", "workflow_run", "conclusion");
     }
 
     private static void deploymentStatus(JsonNode root, Map<String, Object> payload) {

@@ -8,6 +8,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
+import com.company.forgeops.v2.observability.ForgeOpsMetrics;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -19,13 +20,15 @@ public class IntegrationInbox {
     private final IntegrationApplier applier;
     private final AuditTrail auditTrail;
     private final TransactionTemplate transactions;
+    private final ForgeOpsMetrics metrics;
 
     public IntegrationInbox(IntegrationEventRepository events, IntegrationApplier applier, AuditTrail auditTrail,
-            TransactionTemplate transactions) {
+            TransactionTemplate transactions, ForgeOpsMetrics metrics) {
         this.events = events;
         this.applier = applier;
         this.auditTrail = auditTrail;
         this.transactions = transactions;
+        this.metrics = metrics;
     }
 
     public InboxReceipt accept(InboundEvent inbound) {
@@ -81,7 +84,10 @@ public class IntegrationInbox {
         IntegrationApplier.ApplyResult result = applier.apply(event);
         switch (result.disposition()) {
             case APPLIED -> event.applied();
-            case DEFERRED -> event.deferred(result.detail());
+            case DEFERRED -> {
+                event.deferred(result.detail());
+                metrics.deferredEvent(event.getEventType());
+            }
             case REJECTED -> event.rejected(result.detail());
         }
         auditTrail.record(event.getFeedbackId(), event.getCycleId(), event.getAgentRunId(), "integration:" + event.getSource(),

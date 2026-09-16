@@ -1,6 +1,7 @@
 package com.company.forgeops.v2.workflow;
 
 import com.company.forgeops.v2.audit.AuditTrail;
+import com.company.forgeops.v2.observability.ForgeOpsMetrics;
 import com.company.forgeops.v2.agent.domain.AgentRole;
 import com.company.forgeops.v2.agent.domain.AgentRun;
 import com.company.forgeops.v2.agent.domain.AgentRunRepository;
@@ -42,10 +43,12 @@ public class FeedbackWorkflow {
     private final AgentRunRepository agentRuns;
     private final VerificationRecordRepository verifications;
     private final AuditTrail auditTrail;
+    private final ForgeOpsMetrics metrics;
 
     public FeedbackWorkflow(FeedbackRepository feedbacks, FeedbackCycleRepository cycles,
             ContextSnapshotRepository snapshots, ProjectFeedbackCounterRepository counters, OutboxEventRepository outboxEvents,
-            AgentRunRepository agentRuns, VerificationRecordRepository verifications, AuditTrail auditTrail) {
+            AgentRunRepository agentRuns, VerificationRecordRepository verifications, AuditTrail auditTrail,
+            ForgeOpsMetrics metrics) {
         this.feedbacks = feedbacks;
         this.cycles = cycles;
         this.snapshots = snapshots;
@@ -54,6 +57,7 @@ public class FeedbackWorkflow {
         this.agentRuns = agentRuns;
         this.verifications = verifications;
         this.auditTrail = auditTrail;
+        this.metrics = metrics;
     }
 
     @Transactional
@@ -164,6 +168,12 @@ public class FeedbackWorkflow {
         if (run.getState() != AgentRunState.QUEUED) {
             throw new WorkflowConflictException("Agent run is not queueable: " + run.getState());
         }
+        if (run.getRole().isVerificationFamily()) {
+            run.markRunning(providerRunId);
+            auditTrail.record(run.getFeedbackId(), run.getCycleId(), run.getId(), "runtime", "AGENT_SUBMITTED", "SUCCESS",
+                    traceId, "{\"role\":\"" + run.getRole() + "\"}");
+            return;
+        }
         Feedback feedback = get(run.getFeedbackId());
         FeedbackState expected = run.getRole() == AgentRole.TRIAGE ? FeedbackState.TRIAGE_QUEUED : FeedbackState.CODE_QUEUED;
         FeedbackState target = run.getRole() == AgentRole.TRIAGE ? FeedbackState.TRIAGE_RUNNING : FeedbackState.CODE_RUNNING;
@@ -185,9 +195,16 @@ public class FeedbackWorkflow {
                 || run.getState() == AgentRunState.TIMED_OUT) {
             return;
         }
+        run.fail(state, category, "Runtime reported " + state);
+        metrics.agentRunTerminal(state.name());
+        if (run.getRole().isVerificationFamily()) {
+            // Verification-family failures never move the Feedback state machine; the planning layer falls back.
+            auditTrail.record(run.getFeedbackId(), run.getCycleId(), run.getId(), "runtime", "AGENT_TERMINAL", "FAILED",
+                    traceId, "{\"state\":\"" + state + "\",\"category\":\"" + category + "\"}");
+            return;
+        }
         Feedback feedback = get(run.getFeedbackId());
         FeedbackState target = run.getRole() == AgentRole.TRIAGE ? FeedbackState.TRIAGE_FAILED : FeedbackState.EXECUTION_FAILED;
-        run.fail(state, category, "Runtime reported " + state);
         if (feedback.getState() != target) {
             feedback.transitionTo(target);
         }
@@ -261,6 +278,73 @@ public class FeedbackWorkflow {
                 "{\"state\":\"PR_READY\"}");
     }
 
+    /** ADR-0002: verification planning starts immediately after PR_READY; the plan id anchors later evidence. */
+    @Transactional
+    public void beginVerification(UUID feedbackId, UUID cycleId, UUID planId, String traceId) {
+        Feedback feedback = get(feedbackId);
+        if (!feedback.getCurrentCycleId().equals(cycleId)) {
+            throw new WorkflowConflictException("Verification plan does not belong to the current cycle");
+        }
+        if (feedback.getState() == FeedbackState.VERIFY_RUNNING) {
+            return;
+        }
+        if (feedback.getState() != FeedbackState.PR_READY) {
+            throw new WorkflowConflictException("Feedback is not ready for verification: " + feedback.getState());
+        }
+        feedback.transitionTo(FeedbackState.VERIFY_RUNNING);
+        auditTrail.record(feedback.getId(), cycleId, null, "verification", "VERIFICATION_STARTED", "SUCCESS", traceId,
+                "{\"planId\":\"" + planId + "\"}");
+    }
+
+    /** Only the deterministic gate may produce GATE_PASS; WARN and BLOCK land in retryable VERIFY_FAILED. */
+    @Transactional
+    public void recordGateOutcome(UUID feedbackId, UUID cycleId, UUID planId, String decision, String reasonJson,
+            String traceId) {
+        Feedback feedback = get(feedbackId);
+        if (!feedback.getCurrentCycleId().equals(cycleId)) {
+            throw new WorkflowConflictException("Gate outcome does not belong to the current cycle");
+        }
+        if (feedback.getState() != FeedbackState.VERIFY_RUNNING) {
+            throw new WorkflowConflictException("Feedback is not running verification: " + feedback.getState());
+        }
+        if ("PASS".equals(decision)) {
+            feedback.transitionTo(FeedbackState.GATE_PASS);
+            auditTrail.record(feedback.getId(), cycleId, null, "gate", "GATE_DECIDED", "SUCCESS", traceId,
+                    "{\"planId\":\"" + planId + "\",\"decision\":\"PASS\"}");
+            return;
+        }
+        feedback.transitionTo(FeedbackState.VERIFY_FAILED);
+        auditTrail.record(feedback.getId(), cycleId, null, "gate", "GATE_DECIDED", "FAILED", traceId,
+                "{\"planId\":\"" + planId + "\",\"decision\":\"" + decision + "\",\"reasons\":" + reasonJson + "}");
+    }
+
+    /** VER-11: a verification retry re-enters VERIFY_RUNNING with a fresh plan; terminal facts stay immutable. */
+    @Transactional
+    public Feedback retryVerification(UUID feedbackId, String actor, String traceId) {
+        Feedback feedback = get(feedbackId);
+        if (feedback.getState() != FeedbackState.VERIFY_FAILED) {
+            throw new WorkflowConflictException("Feedback is not retryable for verification: " + feedback.getState());
+        }
+        feedback.transitionTo(FeedbackState.VERIFY_RUNNING);
+        auditTrail.record(feedback.getId(), feedback.getCurrentCycleId(), null, actor, "VERIFICATION_RETRY", "SUCCESS",
+                traceId, "{}");
+        metrics.manualIntervention("VERIFICATION_RETRY");
+        return feedback;
+    }
+
+    /** Verification-family successes persist their sanitized result without touching the Feedback state machine. */
+    @Transactional
+    public void recordVerificationPlannerOutput(UUID agentRunId, String canonicalResultJson, String traceId) {
+        AgentRun run = agentRuns.lockById(agentRunId)
+                .orElseThrow(() -> new IllegalArgumentException("Agent run does not exist: " + agentRunId));
+        if (!run.getRole().isVerificationFamily() || run.getState() != AgentRunState.RUNNING) {
+            throw new WorkflowConflictException("Verification output is not applicable to run " + agentRunId);
+        }
+        run.succeed(canonicalResultJson);
+        auditTrail.record(run.getFeedbackId(), run.getCycleId(), run.getId(), "runtime", "VERIFICATION_OUTPUT_RECORDED",
+                "SUCCESS", traceId, "{\"role\":\"" + run.getRole() + "\"}");
+    }
+
     @Transactional
     public void recordPrEvidenceRejected(UUID feedbackId, UUID cycleId, UUID agentRunId, String reason, String traceId) {
         Feedback feedback = get(feedbackId);
@@ -278,7 +362,7 @@ public class FeedbackWorkflow {
                 "{\"reason\":\"" + reason + "\"}");
     }
 
-    /** A signed GitHub event may enter BUILD_RUNNING only after verified evidence and an allowlisted human merge. */
+    /** A signed GitHub event may enter BUILD_RUNNING only after GATE_PASS and an allowlisted human merge (ADR-0002). */
     @Transactional
     public void recordAuthorizedMerge(UUID feedbackId, UUID cycleId, UUID agentRunId, String mergerLogin, String traceId) {
         Feedback feedback = get(feedbackId);
@@ -288,8 +372,8 @@ public class FeedbackWorkflow {
         if (feedback.getState() == FeedbackState.BUILD_RUNNING) {
             return;
         }
-        if (feedback.getState() != FeedbackState.PR_READY) {
-            throw new WorkflowConflictException("Feedback is not ready for an authorized merge: " + feedback.getState());
+        if (feedback.getState() != FeedbackState.GATE_PASS) {
+            throw new WorkflowConflictException("Feedback has not passed the verification gate: " + feedback.getState());
         }
         feedback.transitionTo(FeedbackState.BUILD_RUNNING);
         auditTrail.record(feedback.getId(), cycleId, agentRunId, "github:" + mergerLogin, "PR_MERGED", "SUCCESS", traceId,
@@ -342,8 +426,16 @@ public class FeedbackWorkflow {
         if (role == null) {
             throw new IllegalArgumentException("Agent role is required for retry");
         }
+        if (role == AgentRole.VERIFICATION || role == AgentRole.FAILURE_ANALYSIS) {
+            throw new WorkflowConflictException("Verification-family runs are retried through the verification layer");
+        }
         Feedback feedback = get(feedbackId);
-        FeedbackState expected = role == AgentRole.TRIAGE ? FeedbackState.TRIAGE_FAILED : FeedbackState.EXECUTION_FAILED;
+        FeedbackState expected = switch (role) {
+            case TRIAGE -> FeedbackState.TRIAGE_FAILED;
+            case CODING -> feedback.getState() == FeedbackState.VERIFY_FAILED
+                    ? FeedbackState.VERIFY_FAILED : FeedbackState.EXECUTION_FAILED;
+            default -> null;
+        };
         FeedbackState queued = role == AgentRole.TRIAGE ? FeedbackState.TRIAGE_QUEUED : FeedbackState.CODE_QUEUED;
         if (feedback.getState() != expected) {
             throw new WorkflowConflictException("Feedback is not retryable for " + role + ": " + feedback.getState());
@@ -351,8 +443,11 @@ public class FeedbackWorkflow {
         feedback.transitionTo(queued);
         int nextAttempt = agentRuns.findMaxAttemptByCycleIdAndRole(feedback.getCurrentCycleId(), role) + 1;
         enqueueAgent(feedback, role, nextAttempt, traceId);
-        auditTrail.record(feedback.getId(), feedback.getCurrentCycleId(), null, actor, "AGENT_RETRY_QUEUED", "SUCCESS", traceId,
-                "{\"role\":\"" + role + "\",\"attempt\":" + nextAttempt + "}");
+        auditTrail.record(feedback.getId(), feedback.getCurrentCycleId(), null, actor,
+                feedback.getState() == FeedbackState.CODE_QUEUED && expected == FeedbackState.VERIFY_FAILED
+                        ? "VERIFY_TO_CODING_ATTEMPT" : "AGENT_RETRY_QUEUED",
+                "SUCCESS", traceId, "{\"role\":\"" + role + "\",\"attempt\":" + nextAttempt + "}");
+        metrics.manualIntervention("AGENT_RETRY");
         return feedback;
     }
 

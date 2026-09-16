@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import type { RuntimeConfig } from './config.js'
 import { RunStore } from './store.js'
-import type { ExecutionRequest, ExecutionSnapshot, PaseoAdapter, PersistedRun, RunState } from './types.js'
+import { isVerificationFamily, type ExecutionRequest, type ExecutionSnapshot, type PaseoAdapter, type PersistedRun, type RunState } from './types.js'
 
 /** Deep module boundary: all callers see only submit, inspect and cancel. */
 export class ExecutionService {
@@ -69,9 +69,10 @@ export class ExecutionService {
       await this.store.save(run)
       return toSnapshot(run)
     } catch (error) {
-      const failed: PersistedRun = { ...pending, state: 'FAILED', failureCategory: 'PASEO_SUBMIT_FAILED', updatedAt: new Date().toISOString() }
-      await this.store.save(failed)
-      return toSnapshot(failed)
+      // AGT-09: a daemon outage queues the run for the next reconciliation instead of failing the workflow.
+      const queuedForRetry: PersistedRun = { ...pending, state: 'QUEUED', failureCategory: 'PASEO_UNAVAILABLE', updatedAt: new Date().toISOString() }
+      await this.store.save(queuedForRetry)
+      return toSnapshot(queuedForRetry)
     }
   }
 
@@ -133,11 +134,19 @@ function validate(input: ExecutionRequest, config: RuntimeConfig): void {
   if (!input.idempotencyKey?.trim() || !input.projectId?.trim() || !input.prompt?.trim() || !input.outputSchema || !input.cwd?.trim()) {
     throw new Error('idempotencyKey, projectId, cwd, prompt and outputSchema are required')
   }
-  if (input.role !== 'TRIAGE' && input.role !== 'CODING') throw new Error('role must be TRIAGE or CODING')
+  const roles: ReadonlyArray<ExecutionRequest['role']> = ['TRIAGE', 'CODING', 'VERIFICATION', 'FAILURE_ANALYSIS']
+  if (!roles.includes(input.role)) throw new Error('role must be TRIAGE, CODING, VERIFICATION or FAILURE_ANALYSIS')
   if (!Number.isInteger(input.timeoutMs) || input.timeoutMs < 1 || input.timeoutMs > config.defaultRunTimeoutMs) {
     throw new Error('timeoutMs must be a positive integer no greater than the Runtime limit')
   }
   const cwd = resolve(input.cwd)
+  if (isVerificationFamily(input.role)) {
+    // VER-07: verification-family runs may only use isolated task roots, never repository worktrees.
+    if (!config.taskRoots.some((root) => cwd.startsWith(`${root}/`) && cwd !== root)) {
+      throw new Error('verification-family cwd must be a dedicated directory inside the configured task roots')
+    }
+    return
+  }
   if (!config.allowedRoots.some((root) => cwd.startsWith(`${root}/`) || cwd === root)) throw new Error('cwd is outside the configured project allowlist')
 }
 

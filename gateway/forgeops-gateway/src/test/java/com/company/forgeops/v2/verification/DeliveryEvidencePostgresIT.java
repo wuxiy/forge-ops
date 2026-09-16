@@ -41,7 +41,8 @@ import tools.jackson.databind.json.JsonMapper;
                 "forgeops.v2.registry.path=src/test/resources/v2-registry", "forgeops.v2.registry.workspace-root=.",
                 "forgeops.v2.runtime.base-url=http://127.0.0.1:17678", "forgeops.v2.runtime.service-token=integration-runtime-token",
                 "forgeops.v2.github.enabled=true", "forgeops.v2.github.webhook-secret=integration-webhook-secret",
-                "forgeops.v2.github.api-token=integration-read-only-token"})
+                "forgeops.v2.github.api-token=integration-read-only-token",
+                "forgeops.v2.verification.planner-enabled=false"})
 class DeliveryEvidencePostgresIT {
 
     @Autowired
@@ -88,27 +89,36 @@ class DeliveryEvidencePostgresIT {
         assertEquals(FeedbackState.CODE_RUNNING, feedbacks.findById(feedback.getId()).orElseThrow().getState());
         assertEquals(1, verifier.reconcilePending());
         assertEquals(DeliveryEvidenceState.VERIFIED, evidenceRepository.findByAgentRunId(coding.getId()).orElseThrow().getState());
-        assertEquals(FeedbackState.PR_READY, feedbacks.findById(feedback.getId()).orElseThrow().getState());
+        // The verified PR fact opens the verification plan: the deterministic fallback runs immediately.
+        assertEquals(FeedbackState.VERIFY_RUNNING, feedbacks.findById(feedback.getId()).orElseThrow().getState());
+
+        // VER-02: a check for another head SHA is stale and cannot gate; the plan stays open.
+        var wrongSha = inbox.accept(new InboundEvent("GITHUB", "ci-wrong-" + feedback.getId(), "CHECK_RUN",
+                "security-project-a", null, null, null, checkRunPayload(pullRequestNo, "wrong-sha", "success", "e1"),
+                "delivery-evidence-it"));
+        assertEquals(IntegrationEventState.DEFERRED, wrongSha.state());
+        assertEquals(FeedbackState.VERIFY_RUNNING, feedbacks.findById(feedback.getId()).orElseThrow().getState());
+
+        // The mapped PR check supplies BUILD evidence; the gate passes deterministically.
+        var gateCheck = inbox.accept(new InboundEvent("GITHUB", "ci-gate-" + feedback.getId(), "CHECK_RUN",
+                "security-project-a", null, null, null, checkRunPayload(pullRequestNo, "abc123", "success", "e2"),
+                "delivery-evidence-it"));
+        assertEquals(IntegrationEventState.APPLIED, gateCheck.state());
+        assertEquals(FeedbackState.GATE_PASS, feedbacks.findById(feedback.getId()).orElseThrow().getState());
 
         var receipt = inbox.accept(new InboundEvent("GITHUB", "merge-" + feedback.getId(), "PULL_REQUEST",
                 "security-project-a", null, null, null, mergePayload(pullRequestNo), "delivery-evidence-it"));
         assertEquals(IntegrationEventState.APPLIED, receipt.state());
         assertEquals(FeedbackState.BUILD_RUNNING, feedbacks.findById(feedback.getId()).orElseThrow().getState());
 
-        var wrongSha = inbox.accept(new InboundEvent("GITHUB", "ci-wrong-" + feedback.getId(), "CHECK_RUN",
-                "security-project-a", null, null, null, checkRunPayload(pullRequestNo, "wrong-sha", "success"),
-                "delivery-evidence-it"));
-        assertEquals(IntegrationEventState.DEFERRED, wrongSha.state());
-        assertEquals(FeedbackState.BUILD_RUNNING, feedbacks.findById(feedback.getId()).orElseThrow().getState());
-
         var failedBuild = inbox.accept(new InboundEvent("GITHUB", "ci-failed-" + feedback.getId(), "CHECK_RUN",
-                "security-project-a", null, null, null, checkRunPayload(pullRequestNo, "abc123", "failure"),
+                "security-project-a", null, null, null, checkRunPayload(pullRequestNo, "abc123", "failure", "e3"),
                 "delivery-evidence-it"));
         assertEquals(IntegrationEventState.APPLIED, failedBuild.state());
         assertEquals(FeedbackState.BUILD_FAILED, feedbacks.findById(feedback.getId()).orElseThrow().getState());
 
         var retriedBuild = inbox.accept(new InboundEvent("GITHUB", "ci-success-" + feedback.getId(), "CHECK_RUN",
-                "security-project-a", null, null, null, checkRunPayload(pullRequestNo, "abc123", "success"),
+                "security-project-a", null, null, null, checkRunPayload(pullRequestNo, "abc123", "success", "e4"),
                 "delivery-evidence-it"));
         assertEquals(IntegrationEventState.APPLIED, retriedBuild.state());
         assertEquals(FeedbackState.DEPLOY_RUNNING, feedbacks.findById(feedback.getId()).orElseThrow().getState());
@@ -191,10 +201,10 @@ class DeliveryEvidencePostgresIT {
         }
     }
 
-    private static String checkRunPayload(long pullRequestNo, String headSha, String conclusion) {
+    private static String checkRunPayload(long pullRequestNo, String headSha, String conclusion, String digestTag) {
         try {
             var payload = new LinkedHashMap<String, Object>();
-            payload.put("payloadSha256", "b".repeat(64));
+            payload.put("payloadSha256", "b".repeat(62) + digestTag);
             payload.put("repository", "example/security-project-a");
             payload.put("action", "completed");
             payload.put("checkRunId", 77);

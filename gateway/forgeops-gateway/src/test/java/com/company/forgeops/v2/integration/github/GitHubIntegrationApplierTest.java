@@ -36,7 +36,7 @@ class GitHubIntegrationApplierTest {
         DeliveryEvidenceRepository evidence = Mockito.mock(DeliveryEvidenceRepository.class);
         FeedbackWorkflow workflow = Mockito.mock(FeedbackWorkflow.class);
         FeedbackRepository feedbacks = Mockito.mock(FeedbackRepository.class);
-        Feedback feedback = currentFeedback(item, FeedbackState.PR_READY);
+        Feedback feedback = currentFeedback(item, FeedbackState.GATE_PASS);
         when(feedbacks.findById(item.getFeedbackId())).thenReturn(Optional.of(feedback));
         when(catalog.resolveGitHubRepository("example/pilot")).thenReturn(Optional.of(project()));
         when(evidence.findByRepositoryAndPullRequestNoAndState("example/pilot", 42, DeliveryEvidenceState.VERIFIED))
@@ -57,7 +57,7 @@ class GitHubIntegrationApplierTest {
         DeliveryEvidenceRepository evidence = Mockito.mock(DeliveryEvidenceRepository.class);
         FeedbackWorkflow workflow = Mockito.mock(FeedbackWorkflow.class);
         FeedbackRepository feedbacks = Mockito.mock(FeedbackRepository.class);
-        Feedback feedback = currentFeedback(item, FeedbackState.PR_READY);
+        Feedback feedback = currentFeedback(item, FeedbackState.GATE_PASS);
         when(feedbacks.findById(item.getFeedbackId())).thenReturn(Optional.of(feedback));
         when(catalog.resolveGitHubRepository("example/pilot")).thenReturn(Optional.of(project()));
         when(evidence.findByRepositoryAndPullRequestNoAndState("example/pilot", 42, DeliveryEvidenceState.VERIFIED))
@@ -117,7 +117,9 @@ class GitHubIntegrationApplierTest {
 
     private static GitHubIntegrationApplier applier(DeliveryEvidenceRepository evidence, ProjectCatalog catalog,
             FeedbackWorkflow workflow, FeedbackRepository feedbacks) {
-        return new GitHubIntegrationApplier(evidence, catalog, workflow, feedbacks, JsonMapper.shared());
+        return new GitHubIntegrationApplier(evidence, catalog, workflow, feedbacks,
+                Mockito.mock(com.company.forgeops.v2.verification.VerificationService.class),
+                new GitHubWebhookProperties(), JsonMapper.shared());
     }
 
     private static IntegrationEvent pullRequestEvent(String merger, boolean draft, String sha) throws Exception {
@@ -195,6 +197,7 @@ class GitHubIntegrationApplierTest {
 
     private static ResolvedProject project() {
         return new ResolvedProject("pilot", Path.of("."), List.of(Path.of(".")), Set.of("https://pilot.example"),
-                new ResolvedProject.GitHubDelivery("example/pilot", "main", Set.of("owner"), "forgeops-test", "test"));
+                new ResolvedProject.GitHubDelivery("example/pilot", "main", Set.of("owner"), "forgeops-test", "test"),
+                ResolvedProject.defaultPolicy());
     }
 }

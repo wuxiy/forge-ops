@@ -15,7 +15,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /** Reconciles pending Coding delivery facts outside the Agent and webhook paths. */
 @Service
-public class DeliveryEvidenceVerifier {
+public class DeliveryEvidenceVerifier implements VerificationService.DeliveryEvidenceGateway {
 
     private final DeliveryEvidenceRepository evidence;
     private final GitHubWebhookProperties github;
@@ -24,10 +24,11 @@ public class DeliveryEvidenceVerifier {
     private final FeedbackWorkflow workflow;
     private final FeedbackRepository feedbacks;
     private final TransactionTemplate transactions;
+    private final VerificationService verification;
 
     public DeliveryEvidenceVerifier(DeliveryEvidenceRepository evidence, GitHubWebhookProperties github,
             GitHubPullRequestClient pullRequests, GitHubPullRequestEvidenceMatcher matcher, FeedbackWorkflow workflow,
-            FeedbackRepository feedbacks, TransactionTemplate transactions) {
+            FeedbackRepository feedbacks, TransactionTemplate transactions, VerificationService verification) {
         this.evidence = evidence;
         this.github = github;
         this.pullRequests = pullRequests;
@@ -35,6 +36,12 @@ public class DeliveryEvidenceVerifier {
         this.workflow = workflow;
         this.feedbacks = feedbacks;
         this.transactions = transactions;
+        this.verification = verification;
+    }
+
+    @Override
+    public DeliveryEvidence findById(UUID id) {
+        return evidence.findById(id).orElse(null);
     }
 
     public int reconcilePending() {
@@ -90,6 +97,8 @@ public class DeliveryEvidenceVerifier {
         if (result.matches()) {
             managed.verified(result.observedJson());
             workflow.recordPrEvidenceVerified(managed.getFeedbackId(), managed.getCycleId(), managed.getAgentRunId(), traceId);
+            // ADR-0002: the verified PR fact immediately opens the verification plan for this cycle.
+            transactions.executeWithoutResult(status -> verification.onDeliveryEvidenceVerified(managed.getId(), traceId));
             return;
         }
         String reason = "MISMATCH_" + String.join("_", result.mismatches());

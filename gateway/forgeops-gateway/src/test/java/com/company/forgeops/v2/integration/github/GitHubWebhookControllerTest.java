@@ -82,7 +82,8 @@ class GitHubWebhookControllerTest {
 
     private static ResolvedProject project(String id) {
         return new ResolvedProject(id, Path.of("."), List.of(Path.of(".")), Set.of("https://pilot.example"),
-                new ResolvedProject.GitHubDelivery("example/pilot", "main", Set.of("owner"), "forgeops-test", "test"));
+                new ResolvedProject.GitHubDelivery("example/pilot", "main", Set.of("owner"), "forgeops-test", "test"),
+                ResolvedProject.defaultPolicy());
     }
 
     private static String signature(String secret, byte[] body) throws Exception {

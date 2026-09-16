@@ -1,5 +1,10 @@
-export type RunRole = 'TRIAGE' | 'CODING'
+export type RunRole = 'TRIAGE' | 'CODING' | 'VERIFICATION' | 'FAILURE_ANALYSIS'
 export type RunState = 'QUEUED' | 'SUBMITTING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'TIMED_OUT'
+
+/** Verification-family roles are read-only: isolated task directories, never repository worktrees (VER-07). */
+export function isVerificationFamily(role: RunRole): boolean {
+  return role === 'VERIFICATION' || role === 'FAILURE_ANALYSIS'
+}
 
 export interface ExecutionRequest {
   idempotencyKey: string

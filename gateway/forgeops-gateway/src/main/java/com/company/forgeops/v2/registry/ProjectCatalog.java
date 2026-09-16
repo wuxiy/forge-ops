@@ -21,16 +21,21 @@ import org.yaml.snakeyaml.Yaml;
 public class ProjectCatalog {
 
     private static final Set<String> TOP_LEVEL_FIELDS = Set.of("id", "enabled", "repositoryRoot", "allowedPaths",
-            "browserOrigins", "policy", "github");
-    private static final Set<String> POLICY_FIELDS = Set.of("autoMerge", "productionDeploy");
+            "browserOrigins", "policy", "github", "qualityPolicy");
+    private static final Set<String> POLICY_FIELDS = Set.of("productionDeploy");
     private static final Set<String> GITHUB_FIELDS = Set.of("repository", "baseBranch", "allowedMergeLogins",
             "requiredCheckName", "testEnvironment");
+    private static final Set<String> QUALITY_POLICY_FIELDS = Set.of("requiredCategories", "categoryMappings",
+            "autoMerge", "evidenceRetentionDays", "subtractiveSelection", "recallGuardRuns", "graphMaxAgeDays",
+            "graphMaxMergeLag");
 
     private final RegistryProperties properties;
+    private final GlobalQualityPolicy globalPolicy;
     private final AtomicReference<Map<String, ResolvedProject>> projects = new AtomicReference<>(Map.of());
 
-    public ProjectCatalog(RegistryProperties properties) {
+    public ProjectCatalog(RegistryProperties properties, GlobalQualityPolicy globalPolicy) {
         this.properties = properties;
+        this.globalPolicy = globalPolicy;
     }
 
     @PostConstruct
@@ -99,7 +104,7 @@ public class ProjectCatalog {
         }
         Map<String, Object> policy = requireObject(root, "policy", file);
         rejectUnknown(policy, POLICY_FIELDS, file + " policy");
-        if (requireBoolean(policy, "autoMerge", file) || requireBoolean(policy, "productionDeploy", file)) {
+        if (requireBoolean(policy, "productionDeploy", file)) {
             throw new IllegalStateException("project policy cannot relax the global human gate: " + file);
         }
         Map<String, Object> github = requireObject(root, "github", file);
@@ -115,9 +120,68 @@ public class ProjectCatalog {
         if (allowedMergeLogins.stream().anyMatch(login -> !login.matches("[A-Za-z0-9-]+"))) {
             throw new IllegalStateException("github.allowedMergeLogins contains an invalid login: " + file);
         }
+        ResolvedProject.QualityPolicy qualityPolicy = parseQualityPolicy(root, file);
         return new ResolvedProject(id, repositoryRoot, List.copyOf(allowedPaths), browserOrigins,
                 new ResolvedProject.GitHubDelivery(repository, baseBranch, allowedMergeLogins, requiredCheckName,
-                        testEnvironment));
+                        testEnvironment), qualityPolicy);
+    }
+
+    /** ADR-0006: projects resolve against the global defaults and may only tighten them. */
+    private ResolvedProject.QualityPolicy parseQualityPolicy(Map<String, Object> root, Path file) {
+        Map<String, Object> section = root.containsKey("qualityPolicy") ? requireObject(root, "qualityPolicy", file)
+                : Map.of();
+        rejectUnknown(section, QUALITY_POLICY_FIELDS, file + " qualityPolicy");
+        List<String> requiredCategories = section.containsKey("requiredCategories")
+                ? requireStringList(section, "requiredCategories", file)
+                : List.copyOf(globalPolicy.requiredCategories());
+        Set<String> required = new LinkedHashSet<>(requiredCategories);
+        if (!required.containsAll(globalPolicy.requiredCategories())) {
+            throw new IllegalStateException("qualityPolicy.requiredCategories cannot drop a global category: " + file);
+        }
+        Map<String, String> categoryMappings = new LinkedHashMap<>();
+        if (section.containsKey("categoryMappings")) {
+            Object raw = section.get("categoryMappings");
+            if (!(raw instanceof Map<?, ?> mappings)) {
+                throw new IllegalStateException("qualityPolicy.categoryMappings must be an object: " + file);
+            }
+            for (Map.Entry<?, ?> entry : mappings.entrySet()) {
+                if (!(entry.getKey() instanceof String checkName) || !(entry.getValue() instanceof String category)
+                        || checkName.isBlank() || category.isBlank()) {
+                    throw new IllegalStateException("qualityPolicy.categoryMappings must map check names to categories: "
+                            + file);
+                }
+                categoryMappings.put(checkName, category);
+            }
+        }
+        boolean autoMerge = section.containsKey("autoMerge") && requireBoolean(section, "autoMerge", file);
+        int retentionDays = section.containsKey("evidenceRetentionDays")
+                ? requireInt(section, "evidenceRetentionDays", file)
+                : globalPolicy.defaultEvidenceRetentionDays();
+        if (retentionDays < 1 || retentionDays > globalPolicy.maxEvidenceRetentionDays()) {
+            throw new IllegalStateException("qualityPolicy.evidenceRetentionDays must be between 1 and "
+                    + globalPolicy.maxEvidenceRetentionDays() + ": " + file);
+        }
+        boolean subtractive = section.containsKey("subtractiveSelection")
+                && requireBoolean(section, "subtractiveSelection", file);
+        int recallGuardRuns = section.containsKey("recallGuardRuns") ? requireInt(section, "recallGuardRuns", file)
+                : globalPolicy.recallGuardRuns();
+        int graphMaxAgeDays = section.containsKey("graphMaxAgeDays") ? requireInt(section, "graphMaxAgeDays", file)
+                : globalPolicy.graphMaxAgeDays();
+        int graphMaxMergeLag = section.containsKey("graphMaxMergeLag") ? requireInt(section, "graphMaxMergeLag", file)
+                : globalPolicy.graphMaxMergeLag();
+        if (recallGuardRuns < 1 || graphMaxAgeDays < 1 || graphMaxMergeLag < 1) {
+            throw new IllegalStateException("qualityPolicy limits must be positive: " + file);
+        }
+        return new ResolvedProject.QualityPolicy(List.copyOf(required), Map.copyOf(categoryMappings), autoMerge,
+                retentionDays, subtractive, recallGuardRuns, graphMaxAgeDays, graphMaxMergeLag);
+    }
+
+    private static int requireInt(Map<String, Object> root, String field, Path file) {
+        Object value = root.get(field);
+        if (!(value instanceof Integer number)) {
+            throw new IllegalStateException(field + " must be an integer: " + file);
+        }
+        return number;
     }
 
     private static Path absoluteDirectory(String value, String field) {

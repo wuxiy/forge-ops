@@ -17,6 +17,9 @@ public enum FeedbackState {
     CODE_RUNNING,
     EXECUTION_FAILED,
     PR_READY,
+    VERIFY_RUNNING,
+    VERIFY_FAILED,
+    GATE_PASS,
     BUILD_RUNNING,
     BUILD_FAILED,
     DEPLOY_RUNNING,
@@ -39,7 +42,10 @@ public enum FeedbackState {
         result.put(CODE_QUEUED, EnumSet.of(CODE_RUNNING, EXECUTION_FAILED));
         result.put(CODE_RUNNING, EnumSet.of(EXECUTION_FAILED, PR_READY));
         result.put(EXECUTION_FAILED, EnumSet.of(CODE_QUEUED));
-        result.put(PR_READY, EnumSet.of(BUILD_RUNNING));
+        result.put(PR_READY, EnumSet.of(VERIFY_RUNNING));
+        result.put(VERIFY_RUNNING, EnumSet.of(VERIFY_FAILED, GATE_PASS));
+        result.put(VERIFY_FAILED, EnumSet.of(VERIFY_RUNNING, CODE_QUEUED));
+        result.put(GATE_PASS, EnumSet.of(BUILD_RUNNING));
         result.put(BUILD_RUNNING, EnumSet.of(BUILD_FAILED, DEPLOY_RUNNING));
         result.put(BUILD_FAILED, EnumSet.of(BUILD_RUNNING));
         result.put(DEPLOY_RUNNING, EnumSet.of(DEPLOY_FAILED, WAITING_VERIFY));
@@ -57,11 +63,12 @@ public enum FeedbackState {
     public String userVisibleStatus() {
         return switch (this) {
             case RECEIVED, CONTEXT_READY, TRIAGE_QUEUED -> "OPEN";
-            case TRIAGE_RUNNING, CODE_QUEUED, CODE_RUNNING, PR_READY, BUILD_RUNNING, DEPLOY_RUNNING -> "IN_PROGRESS";
+            case TRIAGE_RUNNING, CODE_QUEUED, CODE_RUNNING, PR_READY, VERIFY_RUNNING, GATE_PASS, BUILD_RUNNING,
+                    DEPLOY_RUNNING -> "IN_PROGRESS";
             case NEEDS_INPUT -> "NEEDS_INPUT";
             case NO_CODE_REQUIRED, WAITING_VERIFY -> "WAITING_VERIFY";
             case DONE -> "DONE";
-            case TRIAGE_FAILED, EXECUTION_FAILED, BUILD_FAILED, DEPLOY_FAILED -> "FAILED";
+            case TRIAGE_FAILED, EXECUTION_FAILED, VERIFY_FAILED, BUILD_FAILED, DEPLOY_FAILED -> "FAILED";
             case REOPENED -> "OPEN";
         };
     }

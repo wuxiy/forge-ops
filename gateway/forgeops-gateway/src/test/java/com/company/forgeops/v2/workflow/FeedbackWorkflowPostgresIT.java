@@ -130,8 +130,10 @@ class FeedbackWorkflowPostgresIT {
         feedback = workflow.transition(feedback.getId(), FeedbackState.CODE_QUEUED, "system", tracePrefix + "-2");
         feedback = workflow.transition(feedback.getId(), FeedbackState.CODE_RUNNING, "system", tracePrefix + "-3");
         feedback = workflow.transition(feedback.getId(), FeedbackState.PR_READY, "system", tracePrefix + "-4");
-        feedback = workflow.transition(feedback.getId(), FeedbackState.BUILD_RUNNING, "system", tracePrefix + "-5");
-        feedback = workflow.transition(feedback.getId(), FeedbackState.DEPLOY_RUNNING, "system", tracePrefix + "-6");
-        return workflow.transition(feedback.getId(), FeedbackState.WAITING_VERIFY, "system", tracePrefix + "-7");
+        feedback = workflow.transition(feedback.getId(), FeedbackState.VERIFY_RUNNING, "system", tracePrefix + "-5");
+        feedback = workflow.transition(feedback.getId(), FeedbackState.GATE_PASS, "system", tracePrefix + "-6");
+        feedback = workflow.transition(feedback.getId(), FeedbackState.BUILD_RUNNING, "system", tracePrefix + "-7");
+        feedback = workflow.transition(feedback.getId(), FeedbackState.DEPLOY_RUNNING, "system", tracePrefix + "-8");
+        return workflow.transition(feedback.getId(), FeedbackState.WAITING_VERIFY, "system", tracePrefix + "-9");
     }
 }

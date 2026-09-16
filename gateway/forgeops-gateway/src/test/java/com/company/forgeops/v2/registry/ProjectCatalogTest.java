@@ -20,13 +20,13 @@ class ProjectCatalogTest {
         Files.createDirectory(temp.resolve("repo"));
         Path project = registry.resolve("pilot.yaml");
         Files.writeString(project, valid("pilot"));
-        ProjectCatalog catalog = new ProjectCatalog(properties(registry));
+        ProjectCatalog catalog = new ProjectCatalog(properties(registry), GlobalQualityPolicy.defaults());
         catalog.reload();
 
         assertTrue(catalog.require("pilot").allowsPath(temp.resolve("repo").resolve("src")));
         assertEquals("pilot", catalog.resolveGitHubRepository("example/pilot").orElseThrow().id());
 
-        Files.writeString(project, valid("pilot").replace("autoMerge: false", "autoMerge: true"));
+        Files.writeString(project, valid("pilot") + "qualityPolicy:\n  requiredCategories:\n    - UNIT\n");
         assertThrows(IllegalStateException.class, catalog::reload);
         assertEquals("pilot", catalog.require("pilot").id());
     }
@@ -36,7 +36,7 @@ class ProjectCatalogTest {
         Path registry = Files.createDirectory(temp.resolve("registry"));
         Files.createDirectory(temp.resolve("repo"));
         Files.writeString(registry.resolve("pilot.yaml"), valid("pilot") + "unexpected: value\n");
-        ProjectCatalog catalog = new ProjectCatalog(properties(registry));
+        ProjectCatalog catalog = new ProjectCatalog(properties(registry), GlobalQualityPolicy.defaults());
 
         assertThrows(IllegalStateException.class, catalog::reload);
     }
@@ -58,7 +58,6 @@ class ProjectCatalogTest {
                 browserOrigins:
                   - https://pilot.example
                 policy:
-                  autoMerge: false
                   productionDeploy: false
                 github:
                   repository: example/%s
