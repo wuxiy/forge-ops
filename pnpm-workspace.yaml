@@ -5,3 +5,6 @@ packages:
   - runtime/forgeops-paseo-runtime
   - examples/demo-app/web
   - examples/demo-app/react-demo
+
+onlyBuiltDependencies:
+  - esbuild
