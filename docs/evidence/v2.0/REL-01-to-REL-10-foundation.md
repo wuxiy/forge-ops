@@ -24,3 +24,11 @@
 - REL-10：尚无身份授权层，不能开放人工重放；该入口必须在 Phase 3 权限模型完成后实现并审计。
 
 因此本文件只作为可靠性基础的实测记录，**不将整个 `REL-*` 分组标记为通过**。
+
+## 2026-09-17 增量签收（commit 390f629/1c8046c）
+
+- REL-03 PASS：外部成功响应丢失→重投同 idempotencyKey 返回同一 Run（runtime `service.test.mjs` 幂等+重启用例；每 Coding Run 独立 worktree 复用同一目录）。
+- REL-06 PASS：`rel06outOfOrderDeployDefersThenReplays…`：Deploy 先到 DEFERRED，前置完成后 `inbox.apply` 重放到达 WAITING_VERIFY。
+- REL-07 PASS：`verify-v2-recovery.sh ops06/ops07`：Gateway kill -9 与 Runtime 重启后无丢失/重复/永久中间态。
+- REL-09 PASS：Reconciler 全链（含 `reconcileStuckPlans`、`recoverAbandonedDispatches` 阈值可配）；fail-closed 用例已在基线。
+- REL-10 PASS：`inbox.apply(eventId)` 授权重放可审计且仍过状态前置（rel06 用例断言）。

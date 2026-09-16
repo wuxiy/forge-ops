@@ -7,13 +7,13 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY runtime/forgeops-paseo-runtime/package.json runtime/forgeops-paseo-runtime/
 RUN pnpm --filter @forgeops/paseo-runtime install --frozen-lockfile
 COPY runtime/forgeops-paseo-runtime runtime/forgeops-paseo-runtime
-RUN pnpm --filter @forgeops/paseo-runtime build
+RUN pnpm --filter @forgeops/paseo-runtime build \
+    && pnpm --filter @forgeops/paseo-runtime deploy --prod --legacy /deploy \
+    && cp -R runtime/forgeops-paseo-runtime/dist /deploy/dist
 
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /src/runtime/forgeops-paseo-runtime/dist ./dist
-COPY --from=build /src/runtime/forgeops-paseo-runtime/node_modules ./node_modules
-COPY --from=build /src/runtime/forgeops-paseo-runtime/package.json ./
+COPY --from=build /deploy ./
 EXPOSE 7676
 ENTRYPOINT ["node", "dist/server.js"]

@@ -121,6 +121,17 @@ test('requires a token, keeps one execution per idempotency key, and survives re
   await second.close()
 })
 
+test('AGT-03 non-loopback bind requires the explicit private-network declaration', () => {
+  const base = {
+    FORGEOPS_RUNTIME_SERVICE_TOKEN: 'token',
+    FORGEOPS_RUNTIME_DATA_FILE: join(root, 'config2.json'),
+    FORGEOPS_RUNTIME_ALLOWED_ROOTS: root,
+    FORGEOPS_RUNTIME_HOST: '0.0.0.0',
+  }
+  assert.throws(() => loadConfig(base), /loopback/)
+  assert.doesNotThrow(() => loadConfig({ ...base, FORGEOPS_RUNTIME_PRIVATE_NETWORK: 'true' }))
+})
+
 test('rejects non-loopback configuration and paths outside the project allowlist', async () => {
   assert.throws(() => loadConfig({
     FORGEOPS_RUNTIME_SERVICE_TOKEN: 'token',

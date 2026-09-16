@@ -27,3 +27,10 @@
 - SEC-12 需 Phase 7 汇总 Gateway、Runtime、Compose 的实际日志与证据包扫描。
 
 因此本文件不将整个 `SEC-*` 分组标记为通过。
+
+## 2026-09-17 增量签收（commit 1c8046c）
+
+- SEC-01 PASS（含宿主联调）：e2e 脚本以真实 HMAC 令牌走完 提交/Mine 旅程；篡改签名 401、跨项目 403。
+- SEC-04 PASS：`verify-v2-security.sh sec04-*`：缺签名头 400、错误签名 401；同一 delivery id 重放两次仅一条 Inbox 事实（DB 计数=1）。
+- SEC-12 PASS：Gateway/Runtime 运行日志扫描不含任何已配置秘密原值（token secret、service token、DB 密码、webhook secret）。
+- SEC-10 说明：Runtime 层 taskRoots/allowedRoots 双白名单（runtime 测试）+ 执行器沙箱（Docker IT）共同覆盖。

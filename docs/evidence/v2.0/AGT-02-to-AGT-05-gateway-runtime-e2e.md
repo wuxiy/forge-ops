@@ -35,3 +35,13 @@
 - AGT-05 的缺字段、额外字段、非法 enum 反例尚未做真实 Paseo 反向探针；
 - Coding、Git Provider 独立核验、CI、测试部署、超时、离线恢复、每项目并发上限均尚未完成；
 - 本记录不能替代两个真实试点、自然反馈与 Owner 验收，因此不签收整个 `AGT-*` 或 2.0。
+
+## 2026-09-17 增量签收（commit 390f629）
+
+- AGT-01 PASS：Gateway 为唯一状态源（FeedbackWorkflow 独占状态迁移）；无 Multica Poller/评论 Marker/Hub Workflow 主流程。
+- AGT-06 PASS：Coding Schema 严格校验 + 伪造 PR 输出不得直接进入 PR_READY（DeliveryEvidence 独立核验链 + PG IT）。
+- AGT-07 PASS：`GitHubPullRequestEvidenceMatcher`/`DeliveryEvidencePostgresIT`：repo/branch/commit/PR 不匹配即拒绝。
+- AGT-08 PASS：runtime 超时仅在 Paseo 确认取消后 TIMED_OUT（`service.test.mjs`）；取消返回快照。
+- AGT-09 PASS：daemon 离线时 Runtime 将 Run 落回 QUEUED（PASEO_UNAVAILABLE，5s 连接超时上限），恢复后仅继续一次（幂等重投）；真实 daemon 通道项见 VER-05/06 ENV_BLOCKED 说明。
+- AGT-10 PASS：每 Coding Run 独立 git worktree + `forgeops/run-*` 分支（`AgentRunDispatcher.ensureCodingWorktree`），重投复用同一 worktree。
+- AGT-11 PASS：超出项目并发上限的提交保持 QUEUED（runtime 并发用例）。

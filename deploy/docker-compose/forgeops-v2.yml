@@ -41,11 +41,14 @@ services:
       FORGEOPS_DB_URL: jdbc:postgresql://postgres:5432/${FORGEOPS_DB_NAME}
       FORGEOPS_DB_USER: ${FORGEOPS_DB_USER:?FORGEOPS_DB_USER is required}
       FORGEOPS_DB_PASSWORD: ${FORGEOPS_DB_PASSWORD:?FORGEOPS_DB_PASSWORD is required}
-      FORGEOPS_V2_REGISTRY_PATH: /app/registry/v2/projects
+      FORGEOPS_V2_REGISTRY_PATH: ${FORGEOPS_V2_REGISTRY_PATH:-/app/registry-v2}
       FORGEOPS_V2_REGISTRY_WORKSPACE_ROOT: /var/forgeops/workspaces
       FORGEOPS_V2_SECURITY_TOKEN_SECRET: ${FORGEOPS_V2_SECURITY_TOKEN_SECRET:?token secret is required}
       FORGEOPS_RUNTIME_URL: http://runtime:7676
       FORGEOPS_RUNTIME_SERVICE_TOKEN: ${FORGEOPS_RUNTIME_SERVICE_TOKEN:?runtime service token is required}
+      # AGT-03: 容器运行在 forgeops-internal 私有网络内，不发布端口
+      FORGEOPS_RUNTIME_PRIVATE_NETWORK: "true"
+      FORGEOPS_RUNTIME_HOST: 0.0.0.0
       FORGEOPS_V2_GITHUB_ENABLED: ${FORGEOPS_V2_GITHUB_ENABLED:-false}
       FORGEOPS_V2_GITHUB_WEBHOOK_SECRET: ${FORGEOPS_V2_GITHUB_WEBHOOK_SECRET:-}
       FORGEOPS_V2_GITHUB_API_TOKEN: ${FORGEOPS_V2_GITHUB_API_TOKEN:-}
@@ -55,9 +58,9 @@ services:
       FORGEOPS_V2_EXECUTOR_TASK_ROOT: /var/lib/forgeops/executor
       FORGEOPS_V2_EXECUTOR_IMAGES: ${FORGEOPS_V2_EXECUTOR_IMAGES:-}
     volumes:
-      - ../../registry:/app/registry:ro
+      - ./registry-v2:/app/registry-v2:ro
+      - ./workspace:/var/forgeops/workspaces
       - forgeops-v2-executor:/var/lib/forgeops/executor
-      - forgeops-v2-workspaces:/var/forgeops/workspaces
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health/readiness | grep -q UP || exit 1"]
       interval: 15s
@@ -77,6 +80,9 @@ services:
       - gateway
     environment:
       FORGEOPS_RUNTIME_SERVICE_TOKEN: ${FORGEOPS_RUNTIME_SERVICE_TOKEN:?runtime service token is required}
+      # AGT-03: 容器运行在 forgeops-internal 私有网络内，不发布端口
+      FORGEOPS_RUNTIME_PRIVATE_NETWORK: "true"
+      FORGEOPS_RUNTIME_HOST: 0.0.0.0
       FORGEOPS_RUNTIME_DATA_FILE: /var/lib/forgeops-runtime/runs.json
       FORGEOPS_RUNTIME_ALLOWED_ROOTS: /var/forgeops/workspaces
       FORGEOPS_RUNTIME_TASK_ROOTS: /var/lib/forgeops/executor/planner
@@ -84,7 +90,7 @@ services:
       FORGEOPS_PASEO_PASSWORD: ${FORGEOPS_PASEO_PASSWORD:-}
       FORGEOPS_PASEO_PROVIDER: ${FORGEOPS_PASEO_PROVIDER:-codex/gpt-5.5}
     volumes:
-      - forgeops-v2-workspaces:/var/forgeops/workspaces
+      - ./workspace:/var/forgeops/workspaces
       - forgeops-v2-executor:/var/lib/forgeops/executor
       - forgeops-v2-runtime-data:/var/lib/forgeops-runtime
     healthcheck:
@@ -100,7 +106,6 @@ services:
 volumes:
   forgeops-v2-pgdata:
   forgeops-v2-executor:
-  forgeops-v2-workspaces:
   forgeops-v2-runtime-data:
 
 networks:

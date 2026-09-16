@@ -24,3 +24,9 @@
 - WF-10（终态事件重放）依赖 Phase 2 Inbox。
 
 因此这份文件不把整个 `WF-*` 分组标为完成；它只记录已经实跑的基础证据。
+
+## 2026-09-17 增量签收（commit 390f629）
+
+- WF-08 PASS：VERIFY_FAILED 与 EXECUTION/BUILD/DEPLOY_FAILED 分离；`VerificationLayerPostgresIT.ver01verifyFailed…` 在真实 PG 上验证 VERIFY_FAILED 仅允许重试验证或授权转新 Coding attempt（`workflow.retry` VERIFY_FAILED→CODE_QUEUED）。
+- WF-09 PASS：`wf09concurrentTransitions…` 两线程并发推进同一 Feedback，恰一个成功（乐观锁）。
+- WF-10 PASS：`wf10terminalDoneState…` DONE 后重放 Merge/CI/Deploy 事件全部 REJECTED，状态不变，审计留痕。

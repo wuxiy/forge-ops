@@ -2,6 +2,8 @@ import { resolve } from 'node:path'
 
 export interface RuntimeConfig {
   host: string
+  /** true only when the deployment places the Runtime on an explicitly private network (compose). */
+  privateNetwork: boolean
   port: number
   serviceToken: string
   dataFile: string
@@ -23,7 +25,13 @@ export function loadConfig(environment = process.env): RuntimeConfig {
   const taskRoots = (environment.FORGEOPS_RUNTIME_TASK_ROOTS ?? '')
     .split(',').map((value) => resolve(value.trim())).filter(Boolean)
   const host = environment.FORGEOPS_RUNTIME_HOST ?? '127.0.0.1'
-  if (host !== '127.0.0.1' && host !== '::1') throw new Error('Runtime must bind loopback until a private-network deployment is verified')
+  const privateNetwork = environment.FORGEOPS_RUNTIME_PRIVATE_NETWORK === 'true'
+  if (host !== '127.0.0.1' && host !== '::1') {
+    // AGT-03/OPS-04: non-loopback binds are allowed only for an explicitly declared private network.
+    if (!privateNetwork || host !== '0.0.0.0') {
+      throw new Error('Runtime must bind loopback unless FORGEOPS_RUNTIME_PRIVATE_NETWORK=true on a private network')
+    }
+  }
   const port = Number(environment.FORGEOPS_RUNTIME_PORT ?? '7676')
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('FORGEOPS_RUNTIME_PORT is invalid')
   const defaultRunTimeoutMs = Number(environment.FORGEOPS_RUNTIME_RUN_TIMEOUT_MS ?? '900000')
@@ -36,6 +44,7 @@ export function loadConfig(environment = process.env): RuntimeConfig {
   }
   return {
     host,
+    privateNetwork,
     port,
     serviceToken,
     dataFile: resolve(dataFile),
