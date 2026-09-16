@@ -19,3 +19,6 @@ deploy/docker-compose/data/
 
 # OS
 .DS_Store
+
+# AGT-10 per-run worktrees created by integration tests
+gateway/forgeops-gateway-runs/

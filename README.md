@@ -11,11 +11,11 @@ Feedback SDK / Host identity
           │
           ▼
 ForgeOps Gateway ──service credential──► forgeops-paseo-runtime ──► Paseo daemon
-      │                                             ├─ Triage / Coding：隔离 Worktree
-      │                                             └─ Verification / Failure Analysis：只读任务目录（ADR-0013，未实施）
-      ├──受控调度──► 隔离执行器 / 一次性验证栈（ADR-0004/0008，未实施）
-      ├─ PostgreSQL: Feedback / Cycle / Context / Run / Inbox / Outbox
-      └─ Git/CI/Deploy evidence (尚未接入真实 Provider)
+      │                                             ├─ Triage / Coding：每 Run 独立 Worktree 与分支
+      │                                             └─ Verification / Failure Analysis：只读任务目录（ADR-0013）
+      ├──受控调度──► 隔离执行器 / 一次性验证栈（ADR-0004/0008，Docker 隔离：内部网络、只读 rootfs、镜像白名单）
+      ├─ PostgreSQL: Feedback / Cycle / Context / Run / Inbox / Outbox / Verification(plan/run/evidence/node/edge)
+      └─ Git/CI/Deploy evidence（GitHub Webhook 边界已实现；真实试点接入待 Owner 指定）
 ```
 
 - Gateway 是状态机、重试和审计的唯一事实源；2.0 默认只通过 Paseo 执行 Triage、Coding、Verification 和 Failure Analysis；隔离执行器只负责运行受控测试，不是状态源。
@@ -26,8 +26,8 @@ ForgeOps Gateway ──service credential──► forgeops-paseo-runtime ──
 
 ## 当前验证状态
 
-- 已实际验证：新的 PostgreSQL 数据模型与迁移、Inbox/Outbox 基础、项目/身份隔离、Paseo 的 submit/inspect/cancel、同 key 幂等、Triage 完整 Schema、运行超时与每项目队列的本地契约。
-- 未签收：真实 Git Provider 证据链、CI、测试部署、真实 Coding PR、完整恢复演练、两真实试点与 20–30 条自然反馈；验证层（ADR-0001～0013 / VER-01～28）已定稿未实施。
+- 已实际验证（隔离 PostgreSQL + 真实 Docker + 真实进程）：新数据库模型与迁移（V1–V5）、Inbox/Outbox、项目/身份隔离、Paseo Runtime 契约（submit/inspect/cancel、幂等、超时、排队、daemon 离线排队恢复）、每 Coding Run 独立 Worktree、验证层核心（VER-01/02/03/04/08/10/11/12/13/16/17/18/19/20/21/22/23/25/28：门禁状态机、确定性 Gate、图谱影响集与保守回退、一次性 Docker 验证栈、种子确定性、召回断路器、Planner 确定性回退、证据保留清理）。
+- 未签收（需要真实外部系统或 Owner 决策）：真实 GitHub PR/CI/部署链（DEL-01～09 真实部分、VER-05/06/09/14/15/26 真实通道）、真实 Paseo daemon 上以全部四种角色跑通（AGT-05 级别的完整闭环）、两个真实试点与 20–30 条自然反馈（VAL-*）、Go/Pivot/Stop 决议。
 
 逐项标准与证据边界见：
 
@@ -45,19 +45,31 @@ V0.1 架构、验收与接入说明仅作历史材料，不是 2.0 的部署或�
 ## 本地质量检查
 
 ```bash
-pnpm --filter @forgeops/paseo-runtime test
+# TypeScript 工作区（runtime + sdk + 示例）
+pnpm -r typecheck && pnpm -r test
 
+# Gateway 全量：单元（surefire）+ PostgreSQL 集成（failsafe，需隔离 forgeops_v2 库）
 cd gateway/forgeops-gateway
-mvn test
-```
-
-PostgreSQL 集成测试必须显式提供一个空的、隔离的 `forgeops_v2` 数据库；它不会访问或迁移 V0.1 数据库：
-
-```bash
 FORGEOPS_DB_URL=jdbc:postgresql://127.0.0.1:15432/forgeops_v2_probe \
 FORGEOPS_DB_USER=forgeops_probe \
 FORGEOPS_DB_PASSWORD='<isolated password>' \
-mvn -Dtest='FeedbackWorkflowPostgresIT,IntegrationReliabilityPostgresIT,FeedbackSecurityPostgresIT' test
+mvn verify
+```
+
+PostgreSQL 集成测试（`*PostgresIT`）在 `mvn verify` 的 failsafe 阶段执行，必须显式提供一个空的、隔离的 `forgeops_v2` 数据库；没有数据库时构建失败而不是跳过。`DockerVerificationExecutorIT` 需要本机 Docker 并会真实创建/销毁一次性验证栈。
+
+三个统一验证入口（缺外部系统时显式 SKIPPED 并以非 0 退出，不计入通过）：
+
+```bash
+scripts/verify-v2-e2e.sh        # 完整闭环：mvn verify + pnpm + compose 校验 + 真实进程 API 旅程
+scripts/verify-v2-recovery.sh   # 故障注入：PG 中断、Gateway kill -9、Runtime 重启
+scripts/verify-v2-security.sh   # 安全：无默认秘密、Webhook 签名/重放、日志无秘密、私网暴露
+```
+
+部署栈（PostgreSQL + Gateway + Runtime，健康检查与卷见文件内注释）：
+
+```bash
+docker compose -f deploy/docker-compose/forgeops-v2.yml --env-file deploy/docker-compose/forgeops-v2.env up -d
 ```
 
 ## 运行前提
