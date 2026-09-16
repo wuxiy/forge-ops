@@ -39,4 +39,29 @@ class GitHubWebhookNormalizerTest {
                 () -> normalizer.normalize("pull_request", "{\"repository\":{\"full_name\":\"example/pilot\"}}"
                         .getBytes(StandardCharsets.UTF_8)));
     }
+
+    @Test
+    void normalizesOnlyExactCheckAndDeploymentBindings() throws Exception {
+        byte[] checkRun = """
+                {"action":"completed","repository":{"full_name":"example/pilot"},
+                 "check_run":{"id":77,"name":"forgeops-test","head_sha":"abc123","status":"completed",
+                 "conclusion":"success","pull_requests":[{"number":42}],"output":{"text":"never persist this"}}}
+                """.getBytes(StandardCharsets.UTF_8);
+        byte[] deployment = """
+                {"action":"created","repository":{"full_name":"example/pilot"},
+                 "deployment":{"id":9,"sha":"abc123","environment":"test",
+                 "payload":{"forgeopsPullRequestNo":42,"secret":"never persist this"}},
+                 "deployment_status":{"id":10,"state":"success","description":"never persist this"}}
+                """.getBytes(StandardCharsets.UTF_8);
+
+        var check = JsonMapper.shared().readTree(normalizer.normalize("check_run", checkRun).payloadJson());
+        var deploy = JsonMapper.shared().readTree(normalizer.normalize("deployment_status", deployment).payloadJson());
+
+        assertEquals("forgeops-test", check.get("checkRunName").asString());
+        assertEquals(42, check.get("pullRequestNo").asInt());
+        assertEquals("test", deploy.get("environment").asString());
+        assertEquals(42, deploy.get("pullRequestNo").asInt());
+        assertFalse(check.toString().contains("never persist this"));
+        assertFalse(deploy.toString().contains("never persist this"));
+    }
 }

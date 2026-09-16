@@ -13,4 +13,5 @@ github:
   baseBranch: main
   allowedMergeLogins:
     - forgeops-test-owner
+  requiredCheckName: forgeops-test
   testEnvironment: test

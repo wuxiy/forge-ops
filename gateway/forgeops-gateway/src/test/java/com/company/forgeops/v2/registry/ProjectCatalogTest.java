@@ -65,6 +65,7 @@ class ProjectCatalogTest {
                   baseBranch: main
                   allowedMergeLogins:
                     - forgeops-owner
+                  requiredCheckName: forgeops-test
                   testEnvironment: test
                 """.formatted(id, id);
     }

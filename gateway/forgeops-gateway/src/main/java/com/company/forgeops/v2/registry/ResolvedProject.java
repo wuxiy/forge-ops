@@ -15,6 +15,6 @@ public record ResolvedProject(String id, Path repositoryRoot, List<Path> allowed
 
     /** A project has exactly one explicit GitHub delivery target; it is never inferred from a PR URL. */
     public record GitHubDelivery(String repository, String baseBranch, Set<String> allowedMergeLogins,
-            String testEnvironment) {
+            String requiredCheckName, String testEnvironment) {
     }
 }

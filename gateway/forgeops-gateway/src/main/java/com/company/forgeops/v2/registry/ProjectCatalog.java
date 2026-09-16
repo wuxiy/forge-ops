@@ -24,7 +24,7 @@ public class ProjectCatalog {
             "browserOrigins", "policy", "github");
     private static final Set<String> POLICY_FIELDS = Set.of("autoMerge", "productionDeploy");
     private static final Set<String> GITHUB_FIELDS = Set.of("repository", "baseBranch", "allowedMergeLogins",
-            "testEnvironment");
+            "requiredCheckName", "testEnvironment");
 
     private final RegistryProperties properties;
     private final AtomicReference<Map<String, ResolvedProject>> projects = new AtomicReference<>(Map.of());
@@ -109,13 +109,15 @@ public class ProjectCatalog {
             throw new IllegalStateException("github.repository must be owner/name: " + file);
         }
         String baseBranch = requireString(github, "baseBranch", file);
+        String requiredCheckName = requireString(github, "requiredCheckName", file);
         String testEnvironment = requireString(github, "testEnvironment", file);
         Set<String> allowedMergeLogins = Set.copyOf(requireStringList(github, "allowedMergeLogins", file));
         if (allowedMergeLogins.stream().anyMatch(login -> !login.matches("[A-Za-z0-9-]+"))) {
             throw new IllegalStateException("github.allowedMergeLogins contains an invalid login: " + file);
         }
         return new ResolvedProject(id, repositoryRoot, List.copyOf(allowedPaths), browserOrigins,
-                new ResolvedProject.GitHubDelivery(repository, baseBranch, allowedMergeLogins, testEnvironment));
+                new ResolvedProject.GitHubDelivery(repository, baseBranch, allowedMergeLogins, requiredCheckName,
+                        testEnvironment));
     }
 
     private static Path absoluteDirectory(String value, String field) {

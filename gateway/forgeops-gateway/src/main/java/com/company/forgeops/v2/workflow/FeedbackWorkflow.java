@@ -16,6 +16,9 @@ import com.company.forgeops.v2.feedback.domain.ProjectFeedbackCounter;
 import com.company.forgeops.v2.feedback.domain.ProjectFeedbackCounterRepository;
 import com.company.forgeops.v2.integration.domain.OutboxEvent;
 import com.company.forgeops.v2.integration.domain.OutboxEventRepository;
+import com.company.forgeops.v2.verification.domain.VerificationRecord;
+import com.company.forgeops.v2.verification.domain.VerificationRecordRepository;
+import com.company.forgeops.v2.verification.domain.VerificationResult;
 import jakarta.persistence.OptimisticLockException;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -37,17 +40,19 @@ public class FeedbackWorkflow {
     private final ProjectFeedbackCounterRepository counters;
     private final OutboxEventRepository outboxEvents;
     private final AgentRunRepository agentRuns;
+    private final VerificationRecordRepository verifications;
     private final AuditTrail auditTrail;
 
     public FeedbackWorkflow(FeedbackRepository feedbacks, FeedbackCycleRepository cycles,
             ContextSnapshotRepository snapshots, ProjectFeedbackCounterRepository counters, OutboxEventRepository outboxEvents,
-            AgentRunRepository agentRuns, AuditTrail auditTrail) {
+            AgentRunRepository agentRuns, VerificationRecordRepository verifications, AuditTrail auditTrail) {
         this.feedbacks = feedbacks;
         this.cycles = cycles;
         this.snapshots = snapshots;
         this.counters = counters;
         this.outboxEvents = outboxEvents;
         this.agentRuns = agentRuns;
+        this.verifications = verifications;
         this.auditTrail = auditTrail;
     }
 
@@ -85,16 +90,47 @@ public class FeedbackWorkflow {
     public Feedback reopen(UUID feedbackId, String actor, String reason, String redactedContextJson, String contextSha256,
             int redactionCount, String traceId) {
         Feedback feedback = get(feedbackId);
+        return reopenCurrentCycle(feedback, actor, reason, redactedContextJson, contextSha256, redactionCount, traceId);
+    }
+
+    /** The reporter's PASS or REOPEN is the only path out of WAITING_VERIFY. */
+    @Transactional
+    public Feedback recordVerification(UUID feedbackId, String verifierSubject, VerificationResult result, String comment,
+            String redactedContextJson, String contextSha256, int redactionCount, String traceId) {
+        if (verifierSubject == null || verifierSubject.isBlank() || result == null) {
+            throw new IllegalArgumentException("Verifier subject and result are required");
+        }
+        Feedback feedback = get(feedbackId);
+        if (feedback.getState() != FeedbackState.WAITING_VERIFY) {
+            throw new WorkflowConflictException("Feedback is not ready for verification: " + feedback.getState());
+        }
+        UUID verifiedCycleId = feedback.getCurrentCycleId();
+        verifications.save(VerificationRecord.create(feedback.getId(), verifiedCycleId, verifierSubject, result, comment));
+        if (result == VerificationResult.PASS) {
+            feedback.transitionTo(FeedbackState.DONE);
+            auditTrail.record(feedback.getId(), verifiedCycleId, null, verifierSubject, "VERIFICATION_RECORDED", "SUCCESS",
+                    traceId, "{\"result\":\"PASS\"}");
+            return feedback;
+        }
+        validateReopenContext(comment, redactedContextJson, contextSha256, redactionCount);
+        auditTrail.record(feedback.getId(), verifiedCycleId, null, verifierSubject, "VERIFICATION_RECORDED", "SUCCESS",
+                traceId, "{\"result\":\"REOPEN\"}");
+        return reopenCurrentCycle(feedback, verifierSubject, comment, redactedContextJson, contextSha256, redactionCount, traceId);
+    }
+
+    private Feedback reopenCurrentCycle(Feedback feedback, String actor, String reason, String redactedContextJson,
+            String contextSha256, int redactionCount, String traceId) {
+        validateReopenContext(reason, redactedContextJson, contextSha256, redactionCount);
         feedback.transitionTo(FeedbackState.REOPENED);
-        int nextCycleNo = cycles.findMaxCycleNo(feedbackId) + 1;
-        FeedbackCycle nextCycle = FeedbackCycle.reopen(feedbackId, nextCycleNo, actor, reason);
+        int nextCycleNo = cycles.findMaxCycleNo(feedback.getId()) + 1;
+        FeedbackCycle nextCycle = FeedbackCycle.reopen(feedback.getId(), nextCycleNo, actor, reason);
         cycles.save(nextCycle);
         feedback.moveToCycle(nextCycle.getId());
-        snapshots.save(ContextSnapshot.create(feedbackId, nextCycle.getId(), CONTEXT_SCHEMA_VERSION, contextSha256,
+        snapshots.save(ContextSnapshot.create(feedback.getId(), nextCycle.getId(), CONTEXT_SCHEMA_VERSION, contextSha256,
                 redactionCount, redactedContextJson));
         feedback.transitionTo(FeedbackState.CONTEXT_READY);
         queueTriage(feedback, traceId);
-        auditTrail.record(feedbackId, nextCycle.getId(), null, actor, "FEEDBACK_REOPENED", "SUCCESS", traceId,
+        auditTrail.record(feedback.getId(), nextCycle.getId(), null, actor, "FEEDBACK_REOPENED", "SUCCESS", traceId,
                 "{\"cycleNo\":" + nextCycleNo + "}");
         return feedback;
     }
@@ -260,6 +296,46 @@ public class FeedbackWorkflow {
                 "{\"state\":\"BUILD_RUNNING\"}");
     }
 
+    /** A signed, project-configured CI result advances only the current Cycle's delivery build. */
+    @Transactional
+    public void recordBuildEvidence(UUID feedbackId, UUID cycleId, UUID agentRunId, boolean succeeded, String traceId) {
+        Feedback feedback = get(feedbackId);
+        if (!feedback.getCurrentCycleId().equals(cycleId)) {
+            throw new WorkflowConflictException("CI evidence does not belong to the current cycle");
+        }
+        boolean retried = feedback.getState() == FeedbackState.BUILD_FAILED && succeeded;
+        if (retried) {
+            feedback.transitionTo(FeedbackState.BUILD_RUNNING);
+        }
+        if (feedback.getState() != FeedbackState.BUILD_RUNNING) {
+            throw new WorkflowConflictException("Feedback is not awaiting CI evidence: " + feedback.getState());
+        }
+        feedback.transitionTo(succeeded ? FeedbackState.DEPLOY_RUNNING : FeedbackState.BUILD_FAILED);
+        auditTrail.record(feedback.getId(), cycleId, agentRunId, "github", retried ? "CI_RETRY_VERIFIED" : "CI_EVIDENCE",
+                succeeded ? "SUCCESS" : "FAILED", traceId,
+                "{\"state\":\"" + feedback.getState() + "\"}");
+    }
+
+    /** A signed test-environment deployment result advances only the current Cycle's delivery deployment. */
+    @Transactional
+    public void recordDeploymentEvidence(UUID feedbackId, UUID cycleId, UUID agentRunId, boolean succeeded, String traceId) {
+        Feedback feedback = get(feedbackId);
+        if (!feedback.getCurrentCycleId().equals(cycleId)) {
+            throw new WorkflowConflictException("Deployment evidence does not belong to the current cycle");
+        }
+        boolean retried = feedback.getState() == FeedbackState.DEPLOY_FAILED && succeeded;
+        if (retried) {
+            feedback.transitionTo(FeedbackState.DEPLOY_RUNNING);
+        }
+        if (feedback.getState() != FeedbackState.DEPLOY_RUNNING) {
+            throw new WorkflowConflictException("Feedback is not awaiting deployment evidence: " + feedback.getState());
+        }
+        feedback.transitionTo(succeeded ? FeedbackState.WAITING_VERIFY : FeedbackState.DEPLOY_FAILED);
+        auditTrail.record(feedback.getId(), cycleId, agentRunId, "github",
+                retried ? "DEPLOYMENT_RETRY_VERIFIED" : "DEPLOYMENT_EVIDENCE", succeeded ? "SUCCESS" : "FAILED", traceId,
+                "{\"state\":\"" + feedback.getState() + "\"}");
+    }
+
     /** A retry is a new immutable attempt in the current Cycle; terminal run facts are never overwritten. */
     @Transactional
     public Feedback retry(UUID feedbackId, AgentRole role, String actor, String traceId) {
@@ -305,6 +381,14 @@ public class FeedbackWorkflow {
                 || command.description() == null || command.description().isBlank()
                 || command.redactedContextJson() == null || command.contextSha256() == null) {
             throw new IllegalArgumentException("A complete feedback command is required");
+        }
+    }
+
+    private static void validateReopenContext(String reason, String redactedContextJson, String contextSha256,
+            int redactionCount) {
+        if (reason == null || reason.isBlank() || redactedContextJson == null || contextSha256 == null
+                || !contextSha256.matches("[a-f0-9]{64}") || redactionCount < 0) {
+            throw new IllegalArgumentException("A complete sanitized reopen context is required");
         }
     }
 }

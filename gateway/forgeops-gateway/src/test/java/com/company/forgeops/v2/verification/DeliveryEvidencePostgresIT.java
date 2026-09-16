@@ -66,7 +66,7 @@ class DeliveryEvidencePostgresIT {
     private FeedbackRepository feedbacks;
 
     @Test
-    void independentlyMatchedDraftPrIsTheOnlyPathFromCodingToPrReady() {
+    void independentlyMatchedDraftPrThenExactCiAndTestDeploymentFactsReachWaitingVerify() {
         long pullRequestNo = Math.floorMod(UUID.randomUUID().getMostSignificantBits(), 1_000_000_000L) + 1;
         var feedback = workflow.submit(new SubmitFeedbackCommand("security-project-a", "reporter", "title", "description",
                 "{\"safe\":true}", "a".repeat(64), 0, "delivery-evidence-it"));
@@ -94,6 +94,36 @@ class DeliveryEvidencePostgresIT {
                 "security-project-a", null, null, null, mergePayload(pullRequestNo), "delivery-evidence-it"));
         assertEquals(IntegrationEventState.APPLIED, receipt.state());
         assertEquals(FeedbackState.BUILD_RUNNING, feedbacks.findById(feedback.getId()).orElseThrow().getState());
+
+        var wrongSha = inbox.accept(new InboundEvent("GITHUB", "ci-wrong-" + feedback.getId(), "CHECK_RUN",
+                "security-project-a", null, null, null, checkRunPayload(pullRequestNo, "wrong-sha", "success"),
+                "delivery-evidence-it"));
+        assertEquals(IntegrationEventState.DEFERRED, wrongSha.state());
+        assertEquals(FeedbackState.BUILD_RUNNING, feedbacks.findById(feedback.getId()).orElseThrow().getState());
+
+        var failedBuild = inbox.accept(new InboundEvent("GITHUB", "ci-failed-" + feedback.getId(), "CHECK_RUN",
+                "security-project-a", null, null, null, checkRunPayload(pullRequestNo, "abc123", "failure"),
+                "delivery-evidence-it"));
+        assertEquals(IntegrationEventState.APPLIED, failedBuild.state());
+        assertEquals(FeedbackState.BUILD_FAILED, feedbacks.findById(feedback.getId()).orElseThrow().getState());
+
+        var retriedBuild = inbox.accept(new InboundEvent("GITHUB", "ci-success-" + feedback.getId(), "CHECK_RUN",
+                "security-project-a", null, null, null, checkRunPayload(pullRequestNo, "abc123", "success"),
+                "delivery-evidence-it"));
+        assertEquals(IntegrationEventState.APPLIED, retriedBuild.state());
+        assertEquals(FeedbackState.DEPLOY_RUNNING, feedbacks.findById(feedback.getId()).orElseThrow().getState());
+
+        var failedDeploy = inbox.accept(new InboundEvent("GITHUB", "deploy-failed-" + feedback.getId(), "DEPLOYMENT_STATUS",
+                "security-project-a", null, null, null, deploymentPayload(pullRequestNo, "failure"),
+                "delivery-evidence-it"));
+        assertEquals(IntegrationEventState.APPLIED, failedDeploy.state());
+        assertEquals(FeedbackState.DEPLOY_FAILED, feedbacks.findById(feedback.getId()).orElseThrow().getState());
+
+        var retriedDeploy = inbox.accept(new InboundEvent("GITHUB", "deploy-success-" + feedback.getId(), "DEPLOYMENT_STATUS",
+                "security-project-a", null, null, null, deploymentPayload(pullRequestNo, "success"),
+                "delivery-evidence-it"));
+        assertEquals(IntegrationEventState.APPLIED, retriedDeploy.state());
+        assertEquals(FeedbackState.WAITING_VERIFY, feedbacks.findById(feedback.getId()).orElseThrow().getState());
     }
 
     @Test
@@ -155,6 +185,42 @@ class DeliveryEvidencePostgresIT {
             payload.put("draft", false);
             payload.put("merged", true);
             payload.put("mergedBy", "forgeops-test-owner");
+            return JsonMapper.shared().writeValueAsString(payload);
+        } catch (Exception impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
+    private static String checkRunPayload(long pullRequestNo, String headSha, String conclusion) {
+        try {
+            var payload = new LinkedHashMap<String, Object>();
+            payload.put("payloadSha256", "b".repeat(64));
+            payload.put("repository", "example/security-project-a");
+            payload.put("action", "completed");
+            payload.put("checkRunId", 77);
+            payload.put("checkRunName", "forgeops-test");
+            payload.put("pullRequestNo", pullRequestNo);
+            payload.put("headSha", headSha);
+            payload.put("status", "completed");
+            payload.put("conclusion", conclusion);
+            return JsonMapper.shared().writeValueAsString(payload);
+        } catch (Exception impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
+    private static String deploymentPayload(long pullRequestNo, String state) {
+        try {
+            var payload = new LinkedHashMap<String, Object>();
+            payload.put("payloadSha256", "c".repeat(64));
+            payload.put("repository", "example/security-project-a");
+            payload.put("action", "created");
+            payload.put("deploymentId", 90);
+            payload.put("deploymentStatusId", 91);
+            payload.put("pullRequestNo", pullRequestNo);
+            payload.put("headSha", "abc123");
+            payload.put("environment", "test");
+            payload.put("state", state);
             return JsonMapper.shared().writeValueAsString(payload);
         } catch (Exception impossible) {
             throw new IllegalStateException(impossible);

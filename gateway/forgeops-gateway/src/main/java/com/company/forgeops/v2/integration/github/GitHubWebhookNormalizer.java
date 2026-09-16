@@ -63,6 +63,8 @@ public class GitHubWebhookNormalizer {
     private static void checkRun(JsonNode root, Map<String, Object> payload) {
         payload.put("action", text(root, "action"));
         payload.put("checkRunId", positiveNumber(root, "check_run", "id"));
+        payload.put("checkRunName", text(root, "check_run", "name"));
+        payload.put("pullRequestNo", positiveNumber(root, "check_run", "pull_requests", "0", "number"));
         payload.put("headSha", text(root, "check_run", "head_sha"));
         payload.put("status", text(root, "check_run", "status"));
         nullableText(root, payload, "conclusion", "check_run", "conclusion");
@@ -72,6 +74,7 @@ public class GitHubWebhookNormalizer {
         payload.put("action", text(root, "action"));
         payload.put("deploymentId", positiveNumber(root, "deployment", "id"));
         payload.put("deploymentStatusId", positiveNumber(root, "deployment_status", "id"));
+        payload.put("pullRequestNo", positiveNumber(root, "deployment", "payload", "forgeopsPullRequestNo"));
         payload.put("headSha", text(root, "deployment", "sha"));
         payload.put("environment", text(root, "deployment", "environment"));
         payload.put("state", text(root, "deployment_status", "state"));
@@ -116,7 +119,22 @@ public class GitHubWebhookNormalizer {
     private static JsonNode value(JsonNode root, String... path) {
         JsonNode node = root;
         for (String part : path) {
-            if (node == null || !node.isObject()) {
+            if (node == null) {
+                return null;
+            }
+            if (node.isArray()) {
+                try {
+                    int index = Integer.parseInt(part);
+                    if (index < 0 || index >= node.size()) {
+                        return null;
+                    }
+                    node = node.get(index);
+                    continue;
+                } catch (NumberFormatException notAnIndex) {
+                    return null;
+                }
+            }
+            if (!node.isObject()) {
                 return null;
             }
             node = node.get(part);

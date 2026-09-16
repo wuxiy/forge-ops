@@ -114,7 +114,7 @@ class DeliveryEvidenceServiceTest {
 
     private static ResolvedProject project() {
         return new ResolvedProject("pilot", Path.of("."), List.of(Path.of(".")), Set.of("https://pilot.example"),
-                new ResolvedProject.GitHubDelivery("example/pilot", "main", Set.of("owner"), "test"));
+                new ResolvedProject.GitHubDelivery("example/pilot", "main", Set.of("owner"), "forgeops-test", "test"));
     }
 
     private static Feedback feedback(UUID feedbackId, UUID cycleId, String projectId) {
