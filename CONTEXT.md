@@ -18,9 +18,9 @@
 
 | 术语 | 定义 | 避免 |
 |---|---|---|
-| AgentExecution | ForgeOps 调用 Agent Run 的深模块接口（submit/inspect/cancel）；ADR-0003 起有两个受控实现：Paseo（Triage/Coding）、Multica-Verify（验证类） | Runtime Provider（决议 #4 不建注册中心） |
-| Paseo Runtime | `runtime/forgeops-paseo-runtime`，执行需要仓库 Worktree 的 Agent Run | — |
-| Multica 通道 | ADR-0003：承载 Verification / Failure Analysis 角色的 Agent 执行通道；与 Multica 人机工作管理面用途并存 | Multica 主链（旧义，已修订） |
+| AgentExecution | ForgeOps 调用 Agent Run 的深模块接口（submit/inspect/cancel）；ADR-0013 起 2.0 默认只有 Paseo 一个实现，覆盖 Triage/Coding/Verification/Failure Analysis | Runtime Provider（决议 #4 不建注册中心） |
+| Paseo Runtime | `runtime/forgeops-paseo-runtime`，执行全部 Agent 角色；Triage/Coding 使用受控 Worktree，Verification/Failure Analysis 使用只读输入与隔离任务目录 | — |
+| Multica | 独立的人机工作管理面；ADR-0013 起不进入 2.0 P0 主链，只能在通过第二 Provider 准入门槛后作为影子/可选 Adapter 重新评审 | Multica 主链或默认验证通道（旧义，已废止） |
 | Inbox / Outbox | 外部事件入站事实表与领域事件出站表；`externalEventId` 是幂等去重键 | 消息队列 |
 | DeliveryEvidence | 对 PR/Build/Deployment 的**独立查询核验**结果；Agent 声明不得替代 | 交付回执 |
 | requiredCheckName | 项目注册的唯一 CI Check 绑定名，任何其他 Check 不能推进状态 | — |
@@ -35,7 +35,7 @@
 | Gate 决策 | 确定性规则引擎输出的 PASS / WARN / BLOCK；唯一可触发 autoMerge 的来源 | LLM 门禁 |
 | autoMerge | registry `policy.autoMerge` 激活后的机器身份 Merge，受 ADR-0005 四条件与 LLM 禁令约束 | 自动合并（无策略语境时） |
 | qualityPolicy | registry 每项目门禁策略：必需 Check 分类（名称映射推导，事件自称不采信）、阻断阈值、证据保留；项目层只能收紧（ADR-0006） | 规则 DSL、Quality Gate 配置文件 |
-| Verification Plan | 验证计划：Multica Verification Agent 依固定 JSON Schema 产出，或确定性回退生成（ADR-0011）；选测与跳过均须给理由 | 测试计划（传统 TestCase 清单） |
+| Verification Plan | 验证计划：Paseo Verification Agent 依固定 JSON Schema 产出，或确定性回退生成（ADR-0011/0013）；选测与跳过均须给理由 | 测试计划（传统 TestCase 清单） |
 | Verification Evidence | 验证执行的过程与结果证据（区别于 DeliveryEvidence 的交付核验）；全部验证必须产生证据 | 测试报告（单文档义） |
 | Risk 分级 | 规则引擎输出的 LOW / MEDIUM / HIGH / CRITICAL；LLM 仅解释不参与计算 | 风险评分（无规则语境时） |
 | Failure Triage | 失败七分类：CODE_BUG / TEST_BUG / FLAKY_TEST / ENVIRONMENT / TEST_DATA / DEPENDENCY / UNKNOWN | 失败原因（泛称） |

@@ -14,7 +14,7 @@ V0.2 提案要求新建全局 Engineering Trace ID 贯穿 Task→Run→PR→CI�
 1. **不引入新的全局 Trace ID**。关联模型以既有 ID 链为锚：
 
    ```text
-   feedback → cycle → verification_plan → multica run / CI check / executor run
+   feedback → cycle → verification_plan → verification agent run / CI check / executor run
                         → verification_evidence → gate 决策 → merge
    ```
 

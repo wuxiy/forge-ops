@@ -3,16 +3,16 @@
 - 状态：Accepted
 - 日期：2026-09-16
 - 决策人：Owner（grill-with-docs 审核会话）
-- 关联：ADR-0003（Multica 通道）、ADR-0006（qualityPolicy）、ADR-0007（图谱与保守回退）；新增 `VER-28`；收敛审核遗留问题第 7 项（Planner 成本）
+- 关联：ADR-0006（qualityPolicy）、ADR-0007（图谱与保守回退）、ADR-0013（Paseo 验证角色）；新增 `VER-28`；收敛审核遗留问题第 7 项（Planner 成本）
 
 ## 背景
 
-PR 门禁在每次 push 后触发一次 Multica Verification run（Planner）。通道不可用、超时、输出非法重试耗尽、或预算达限时，门禁主链不能被建议性能力劫持。同时 LLM 调用是持续成本，需要计量与上限。
+PR 门禁在每次 push 后通过统一 `AgentExecution`/Paseo 触发一次 Verification run（Planner）。通道不可用、超时、输出非法重试耗尽、或预算达限时，门禁主链不能被建议性能力劫持。同时 LLM 调用是持续成本，需要计量与上限。
 
 ## 决策
 
 1. **确定性回退，不阻断**：出现以下任一情形时，自动回退为**确定性计划**——由图谱影响集（ADR-0007）+ `qualityPolicy` 全量必需类别生成，语义等同保守回退：
-   - Multica 通道不可用 / 超时 / `INVALID_OUTPUT` 重试耗尽；
+   - Paseo Verification 角色不可用 / 超时 / `INVALID_OUTPUT` 重试耗尽；
    - 项目或全局 token 预算达限。
    回退事件留审计并计入指标；主链照常推进到 Gate 判定。
 2. **计量与预算**：token 用量按项目计量，进 OPS-10 与 VAL-10；预算全局默认、项目层只能收紧；达限自动降级（同上），不做硬失败。

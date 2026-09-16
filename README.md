@@ -11,23 +11,23 @@ Feedback SDK / Host identity
           │
           ▼
 ForgeOps Gateway ──service credential──► forgeops-paseo-runtime ──► Paseo daemon
-      │                                             │
-      ├──service credential──► Multica 验证通道（ADR-0003，未实施）
+      │                                             ├─ Triage / Coding：隔离 Worktree
+      │                                             └─ Verification / Failure Analysis：只读任务目录（ADR-0013，未实施）
       ├──受控调度──► 隔离执行器 / 一次性验证栈（ADR-0004/0008，未实施）
       ├─ PostgreSQL: Feedback / Cycle / Context / Run / Inbox / Outbox
       └─ Git/CI/Deploy evidence (尚未接入真实 Provider)
 ```
 
-- Gateway 是状态机、重试和审计的唯一事实源；Paseo 是 Coding/Triage 执行器，Multica 验证通道与隔离执行器同样只是执行器，不是状态源。
+- Gateway 是状态机、重试和审计的唯一事实源；2.0 默认只通过 Paseo 执行 Triage、Coding、Verification 和 Failure Analysis；隔离执行器只负责运行受控测试，不是状态源。
 - Runtime 只提供内部的 `submit`、`inspect`、`cancel`，默认只绑定 loopback。
 - 浏览器不能传入 Agent Provider、工作目录、权限、超时或输出 Schema。
 - Triage/Coding 输出必须满足代码固定的 JSON Schema；Coding 声称的 PR/Commit 不能直接推进为 `PR_READY`。
-- Multica 用于人工工作管理，并承载验证类 Agent（ADR-0003）；Coding/Triage 仍走 Paseo。
+- Multica 保留为独立的人机工作管理面，不进入 2.0 P0 主链；如后续证明存在 Paseo 无法满足的硬需求，只能按 ADR-0013 的准入门槛以影子/可选 Adapter 重新评审。
 
 ## 当前验证状态
 
 - 已实际验证：新的 PostgreSQL 数据模型与迁移、Inbox/Outbox 基础、项目/身份隔离、Paseo 的 submit/inspect/cancel、同 key 幂等、Triage 完整 Schema、运行超时与每项目队列的本地契约。
-- 未签收：真实 Git Provider 证据链、CI、测试部署、真实 Coding PR、完整恢复演练、两真实试点与 20–30 条自然反馈；验证层（ADR-0001～0012 / VER-01～28）已定稿未实施。
+- 未签收：真实 Git Provider 证据链、CI、测试部署、真实 Coding PR、完整恢复演练、两真实试点与 20–30 条自然反馈；验证层（ADR-0001～0013 / VER-01～28）已定稿未实施。
 
 逐项标准与证据边界见：
 

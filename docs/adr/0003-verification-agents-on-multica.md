@@ -1,9 +1,11 @@
 # ADR-0003：验证类 Agent 经 Multica 通道执行
 
-- 状态：Accepted
+- 状态：Superseded by ADR-0013
 - 日期：2026-09-16
 - 决策人：Owner（grill-with-docs 审核会话）
 - 关联：ADR-0001；修订 `docs/forgeops-2.0-implementation-plan.md` 决议 #2、#3、#4
+
+> 2026-09-16 后续决议：双执行通道未能证明其相对 Paseo 的不可替代价值，且会提前引入第二套生命周期、凭证与运维面；本 ADR 已由 ADR-0013 取代，仅保留为决策历史。
 
 ## 背景
 

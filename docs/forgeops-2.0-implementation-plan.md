@@ -8,7 +8,7 @@
 >
 > 历史材料：`forgeops-architecture-v0.1.md` 与 `ACCEPTANCE.md` 只作为 V0.1 证据，不作为 2.0 实现约束。
 >
-> 2026-09-16：验证层并入 2.0 实施线（ADR-0001～0012，索引见 [`adr/README.md`](./adr/README.md)）。决议 #2/#3/#4/#6、第 3 节两项“明确不做”、第 5.3 节状态模型与 Phase 6 已按 ADR 正式修订（正文标注修订处）；其余决议不变。
+> 2026-09-16：验证层并入 2.0 实施线（ADR-0001～0013，索引见 [`adr/README.md`](./adr/README.md)）。ADR-0013 已取代 ADR-0003 的双执行通道方案：2.0 默认只启用 Paseo，Multica 不进入 P0 主链；决议 #2/#3/#4/#6、第 3 节两项“明确不做”、第 5.3 节状态模型与 Phase 6 已按 ADR 正式修订（正文标注修订处）；其余决议不变。
 
 ## 1. 结论与实施边界
 
@@ -19,9 +19,9 @@ ForgeOps 2.0 不是通用 Agent 管理平台，也不是 Personal Workstation。
 2.0 采用以下不可变决议（2026-09-16 起，标注 ADR 的条目已按对应决策修订）：
 
 1. **ForgeOps 拥有工作流。** Feedback、Work Cycle、状态迁移、重试、CI/CD、验证和审计的唯一事实源是 ForgeOps 数据库。
-2. **Paseo 只执行需要工作区的 Agent Run。**（ADR-0003 修订）Triage/Coding 走 Paseo；验证类 Agent（VERIFICATION / FAILURE_ANALYSIS）经 Multica 通道执行。不把 Paseo Hub Workflow 作为 ForgeOps 状态机。
-3. **Multica 不驱动 ForgeOps 状态。**（ADR-0003 修订）Multica 用于人直接创建、分派和观察 Agent 工作，并作为验证类 Agent 的执行通道（其返回结果只是声明，须过固定 JSON Schema 与独立核验）；2.0 不通过 Issue 评论标记驱动 ForgeOps 状态。
-4. **不做运行时插件平台。**（ADR-0003 触发修订）`AgentExecution` 是供 ForgeOps 调用的深模块接口；第二个真实实现需求（Multica 验证通道）出现后已抽取 Adapter seam，现有两个受控实现（paseo / multica-verify）。仍不建设 Provider 注册中心；第三个实现需新 ADR。
+2. **Paseo 是 2.0 唯一默认 Agent 执行通道。**（ADR-0013 修订）Triage、Coding、Verification 与 Failure Analysis 均通过同一 `AgentExecution`/Paseo 边界执行；角色权限和输入不同，但生命周期、幂等、取消、超时与恢复契约一致。不把 Paseo Hub Workflow 作为 ForgeOps 状态机。
+3. **Multica 不进入 2.0 P0 主链。**（ADR-0013 修订）Multica 只保留为独立的人机工作管理面；2.0 不通过 Multica Issue、评论、Run 或状态驱动 ForgeOps。只有真实试点证明存在 Paseo 无法满足的硬能力，并通过 ADR-0013 准入门槛后，才可重新评审影子/可选 Adapter。
+4. **不做运行时插件平台。**（ADR-0013 修订）`AgentExecution` 是供 ForgeOps 调用的深模块接口，2.0 只有 Paseo 一个启用实现；接口保留替换能力，但不建设 Provider 注册中心、动态路由、自动故障切换或未被真实需求证明的第二实现。
 5. **不兼容 V0.1 数据和接口。** 新建 `forgeops_v2` 数据库，重建迁移、状态和接口；不做数据迁移、双写、旧状态映射或旧 Multica Issue 续接。
 6. **Agent 自动化终点仍为 Draft PR。**（ADR-0002/0005 修订）Merge 前必须经 PR 门禁（Gate PASS）；确定性规则引擎满足 ADR-0005 全部条件时可以专用机器身份 Merge，否则由授权用户人工 Merge；生产部署和最终验收只能由授权用户完成。
 7. **实验也必须可靠和可审计。** “可以重试”“不会串项目”“不会泄露上下文”“不会错误显示完成”是实验前提，不是生产化增项。
@@ -58,7 +58,7 @@ ForgeOps 2.0 不是通用 Agent 管理平台，也不是 Personal Workstation。
 - Keep、Sentry、HolmesGPT、自动巡检、通用 SRE RCA；
 - 新增前端框架、移动端、通用管理后台或视觉重构；
 - 继续维护 Vue2/Vue3/React 三套 SDK 兼容面；2.0 只保留 framework-neutral Core/DOM 接口；
-- Agent Squad、模型路由、Provider 注册中心、自动选择 Agent（`AgentExecution` 的两个受控实现除外，ADR-0003）；
+- Agent Squad、模型路由、Provider 注册中心、自动选择 Agent，或未经 ADR-0013 准入的第二 Agent Provider；
 - 生产部署与最终验收的自动化；机器 Merge 仅限 ADR-0005 条件下的确定性放行；
 - V0.1 数据迁移、旧接口兼容、旧 Multica Issue 同步；
 - 为尚不存在的第三种日志、VCS、CI 或 Agent Provider 提前建设插件体系；
@@ -96,7 +96,7 @@ Feedback SDK / Host Identity
                ▼
        isolated worktree / Draft PR
 
-ForgeOps Gateway ──service credential──► Multica 验证通道（ADR-0003：Verification / Failure Analysis Agent）
+ForgeOps Gateway ──同一 AgentExecution/Paseo──► Verification / Failure Analysis Agent（ADR-0013）
 ForgeOps Gateway ──受控调度──► 隔离执行器 / 一次性验证栈（ADR-0004/0008）
 
 Git/VCS Webhook ──► IntegrationInbox ──► DeliveryEvidence
@@ -113,12 +113,12 @@ Verify Check / Scheduled Run ──► IntegrationInbox ──► Verification G
 | `ContextPreparation` | `prepare(feedbackId, cycleId)` | 请求/日志关联、字段白名单、PII 清理、截图策略、Schema 校验、快照落库 |
 | `FeedbackWorkflow` | `submit(command)`、`snapshot(feedbackId)` | 状态迁移、乐观锁、Cycle、失败分类、领域事件和审计 |
 | `AgentExecution` | `submit(request)`、`inspect(runId)`、`cancel(runId, reason)` | Paseo SDK、连接恢复、结构化输出、超时、幂等、运行目录和权限 |
-| `Verification`（验证层） | `plan(cycleId, prRef)`、`evaluate(planId)`（细部由 ADR-0002/0006/0007/0011 规定） | 图谱与影响集、Multica 通道与确定性回退、Gate 规则与安全轨、证据采集与保留、执行器调度 |
+| `Verification`（验证层） | `plan(cycleId, prRef)`、`evaluate(planId)`（细部由 ADR-0002/0006/0007/0011/0013 规定） | 图谱与影响集、Paseo 验证角色与确定性回退、Gate 规则与安全轨、证据采集与保留、执行器调度 |
 | `IntegrationInbox` | `accept(source, externalEventId, payload)`、`reconcile()` | 签名校验、去重、乱序暂存、重放、拒绝原因和死信 |
 | `DeliveryEvidence` | `verifyPr(ref)`、`verifyBuild(ref)`、`verifyDeployment(ref)` | Git/VCS/CI/部署查询、repo/branch/commit 绑定、结果防伪 |
 | `AccessControl` | `authenticate(credential)`、`authorize(principal, action, resource)` | 短期令牌、项目 Scope、回调签名、CORS、审计和拒绝响应 |
 
-接口不得暴露 Paseo Agent ID、Multica Issue 评论格式、具体 CLI 参数等 Provider 细节。测试从上述接口进入，不绕过接口验证内部类。
+接口不得暴露 Paseo Agent ID、具体 CLI 参数等 Provider 细节，也不得引入 Multica Issue/评论语义。测试从上述接口进入，不绕过接口验证内部类。
 
 ## 5. 数据模型与状态模型
 
@@ -146,7 +146,7 @@ Verify Check / Scheduled Run ──► IntegrationInbox ──► Verification G
 
 1. 初次提交创建 Cycle 1。
 2. Reopen 创建 Cycle N+1；旧 Cycle、Context Snapshot 和 Agent Run 永远不修改、不重新消费。
-3. 每个 Cycle 最多有一个当前 Triage Run 和一个当前 Coding Run；验证类 Run（VERIFICATION / FAILURE_ANALYSIS，ADR-0003）同样按 `attempt` 递增、不覆盖旧 Run。
+3. 每个 Cycle 最多有一个当前 Triage Run 和一个当前 Coding Run；验证类 Run（VERIFICATION / FAILURE_ANALYSIS，ADR-0013）同样按 `attempt` 递增、不覆盖旧 Run。
 4. 所有外部相关事件必须携带或解析出 `feedbackId + cycleId/runId + projectId`；不能只凭评论文本或 PR URL 推断。
 5. Feedback 的 `current_cycle_id` 与状态变更采用乐观锁；并发命令最多一个成功。
 
@@ -198,8 +198,8 @@ cancel(ExecutionRunId, reason) -> ExecutionSnapshot
 `ExecutionRequest` 只包含 ForgeOps 语义：
 
 - `idempotencyKey`：`feedbackId/cycleId/role/attempt`；
-- `projectId`、受信任的 `workspaceRef`、`baseBranch`；
-- `role`：`TRIAGE`、`CODING`，或验证类角色 `VERIFICATION` / `FAILURE_ANALYSIS`（Multica 通道，ADR-0003）；
+- `projectId`；Triage/Coding 使用受信任的 `workspaceRef`、`baseBranch`，Verification/Failure Analysis 使用只读证据引用与隔离的非仓库任务目录；
+- `role`：`TRIAGE`、`CODING`，或验证类角色 `VERIFICATION` / `FAILURE_ANALYSIS`（均经 Paseo，ADR-0013）；
 - `contextSnapshotId` 与经脱敏的 prompt；
 - `outputSchemaRef`；
 - `timeout`、权限策略引用和关联 Trace ID。
@@ -241,7 +241,7 @@ Coding 结果至少包含：
 
 阶段严格按依赖顺序执行。每个阶段只有在配套验收项全部通过后才能进入下一阶段；环境阻塞或跳过不算通过。
 
-**并行轨道（ADR-0001，Owner 2026-09-16 确认）**：验证层（`VER-*` 验收组与 ADR-0002～0012 对应实现）作为并行轨道立即实施，不受上述 Phase 顺序约束，也不阻塞既有 Phase 推进；每个切片单独提交、先补失败测试与对应 `VER-*` 项。该豁免仅适用于验证层轨道，不改变既有 Phase 的门禁要求。
+**并行轨道（ADR-0001/0013，Owner 2026-09-16 确认）**：验证层（`VER-*` 验收组与 ADR-0002～0013 对应实现）作为并行轨道立即实施，不受上述 Phase 顺序约束，也不阻塞既有 Phase 推进；每个切片单独提交、先补失败测试与对应 `VER-*` 项。该豁免仅适用于验证层轨道，不改变既有 Phase 的门禁要求，也不授权引入第二 Agent Provider。
 
 ### Phase 0：冻结范围与建立基线
 
@@ -251,7 +251,7 @@ Coding 结果至少包含：
 2. 记录当前 commit、可执行测试、跳过项和一条 V0.1 演示链路。
 3. 建立 `docs/evidence/v2.0/<验收ID>/` 证据约定。
 4. 固定两个试点仓库候选，但此阶段不预埋新的价值样本 Bug。
-5. 明确 Paseo daemon、Codex、Git/VCS 和测试环境的实际运行主机及凭证 Scope。
+5. 明确 Paseo daemon、Codex、Git/VCS 和测试环境的实际运行主机及凭证 Scope；Multica 不作为 P0 运行依赖。
 6. 在隔离的临时 Worktree 做 Paseo 技术探针，实测 SDK 的 submit/inspect/cancel、结构化输出、超时和 daemon 断线；记录并锁定 SDK、daemon 与 Codex 版本。
 7. 冻结指标口径和记录模板，并开始收集至少 5 条可比的手工处理基线；如果没有可信历史耗时，则在同一试点期保留手工对照样本。
 
@@ -333,6 +333,7 @@ gateway/.../resources/db/migration/
 7. 强制禁止 Agent Merge、生产部署、读取非项目路径和使用全局 Git 凭证。
 8. 删除 `MulticaPoller`、评论标记解析及 ForgeOps 主链中的 Multica Issue 字段。
 9. 不引入 Paseo Hub Workflow；状态与重试仍由 ForgeOps 控制。
+10. Verification / Failure Analysis 复用同一 Paseo Adapter；只按角色收紧输入、工作区和权限，不复制第二套生命周期实现。
 
 完成标准：验收 `AGT-*` 全部通过。
 
@@ -447,4 +448,4 @@ docs/evidence/v2.0/<验收ID>/
 - Paseo SDK 用于程序化创建、观察和等待 Agent Run：<https://github.com/getpaseo/paseo/blob/main/public-docs/sdk/index.md>
 - Paseo SDK 参考与结构化输出能力：<https://github.com/getpaseo/paseo/blob/main/public-docs/sdk/reference.md>
 - Paseo Hub Workflow 自己拥有工作流能力，因此 2.0 明确不与 ForgeOps 状态机叠加：<https://github.com/getpaseo/paseo/blob/main/public-docs/hub/workflows.md>
-- Multica 的 Agent/Runtime/Run 模型：人机工作管理面，并作为验证类 Agent 执行通道（ADR-0003）；任何情况下不驱动 ForgeOps 状态：<https://multica.ai/docs/agents>
+- Multica 的 Agent/Runtime/Run 模型保留为独立人机工作管理面；ADR-0013 起不进入 2.0 P0 主链，未来只有通过第二 Provider 准入门槛后才可重新评审：<https://multica.ai/docs/agents>

@@ -6,7 +6,7 @@
 >
 > 日期：2026-09-12
 >
-> 2026-09-16：新增 VER 组（依据 `docs/adr/0001`～`0012`，验证层并入 2.0 实施，并行轨道见实施计划 §7）；VER 组整组 P0 由 Owner 同日确认；DEL 组部分条目由 ADR-0002/0005 修订（见 DEL 节注）。
+> 2026-09-16：新增 VER 组（依据 `docs/adr/0001`～`0013`，验证层并入 2.0 实施，并行轨道见实施计划 §7）；ADR-0013 取代 ADR-0003 的双执行通道方案，2.0 默认只启用 Paseo，Multica 不进入 P0 主链；DEL 组部分条目由 ADR-0002/0005 修订（见 DEL 节注）。
 
 ## 1. 验收规则
 
@@ -58,7 +58,7 @@
 | S-03 | 基线记录 | 实跑当前 Maven/pnpm 检查并保存输出 | 通过、失败、跳过分别记录；Vue2 skip 不写成 PASS | 待执行 |
 | S-04 | 新数据库 | 检查连接信息、Flyway history、表结构 | 使用独立 `forgeops_v2`；迁移从 V1 全新创建 | 待执行 |
 | S-05 | 无兼容负担 | 搜索旧状态映射、双写、回填逻辑 | 无 V0.1 数据迁移、旧接口兼容、旧 Multica Issue 续接 | 待执行 |
-| S-06 | 试点环境确认 | 记录两仓库、Runtime/Multica 通道/执行器主机、Git/CI/测试环境、模型可信域（ADR-0010） | 目标、Owner、凭证 Scope、网络边界全部明确；无生产环境 | 待执行 |
+| S-06 | 试点环境确认 | 记录两仓库、Paseo Runtime/执行器主机、Git/CI/测试环境、模型可信域（ADR-0010/0013） | 目标、Owner、凭证 Scope、网络边界全部明确；无生产环境；Multica 不是 P0 运行依赖 | 待执行 |
 | S-07 | Paseo 技术探针 | 隔离 Worktree 实跑 SDK submit/inspect/cancel、结构化输出、超时和断线 | 所有关键契约可实现且有原始输出；失败则停止 2.0，不进入 Phase 1 | 待执行 |
 | S-08 | 版本冻结 | 保存 package lock、daemon/Codex 版本与兼容说明 | SDK、daemon、Codex 均有精确版本；后续升级必须重新跑契约测试 | 待执行 |
 | S-09 | 指标口径与基线 | 评审记录模板，收集近期历史或同期手工对照 | 指标定义固定；至少 5 条可比基线，无法回溯时已有同期对照方案 | 待执行 |
@@ -143,7 +143,7 @@
 | AGT-09 | daemon 离线 | Submit 前离线、Run 中断线、恢复上线 | Run 排队或进入可恢复状态；恢复后仅继续/重试一次，无重复 | 待执行 |
 | AGT-10 | Worktree 隔离 | 同仓库并发两个 Coding Run | 分支、目录、改动互不污染；均从预期 base commit 开始 | 待执行 |
 | AGT-11 | 项目并发限制 | 超过项目并发上限提交 | 多余 Run 保持 QUEUED，不抢占或覆盖工作目录 | 待执行 |
-| AGT-12 | 旧 Multica 路径移除 | 代码与 Schema 搜索、业务实跑 | 主链无 `MulticaPoller`、评论 Marker 和 `multica_issue_id` 依赖；Multica 验证通道（ADR-0003/VER-04～07）不引入上述路径 | 待执行 |
+| AGT-12 | 旧 Multica 路径移除 | 代码与 Schema 搜索、业务实跑 | P0 主链无 `MulticaPoller`、评论 Marker、`multica_issue_id`、Multica Run 或 Multica 服务凭证依赖 | 待执行 |
 
 ## 9. DEL — Git、CI、部署与验证闭环
 
@@ -158,7 +158,7 @@
 | DEL-07 | 真实测试部署成功 | 部署到非生产环境并查询版本/commit | 实际环境运行同一 commit 后进入 WAITING_VERIFY | 待执行 |
 | DEL-08 | 部署失败/重试 | 制造部署失败再恢复 | 先 DEPLOY_FAILED；恢复后进入 WAITING_VERIFY，不误记 BUILD_FAILED | 待执行 |
 | DEL-09 | 事件重复/乱序 | 重放真实 Payload 并交换到达顺序 | 结果与正常顺序一致；无丢失、双推进或错误完成 | 待执行 |
-| DEL-10 | 验证通过 | 原反馈人用合法身份 PASS | Feedback/Cycle 进入 DONE；Multica/Paseo 状态不被当作最终验收 | 待执行 |
+| DEL-10 | 验证通过 | 原反馈人用合法身份 PASS | Feedback/Cycle 进入 DONE；任何 Agent Provider 状态都不被当作最终验收 | 待执行 |
 | DEL-11 | 仍有问题 | 原反馈人 REOPEN 并追加新证据 | 新 Cycle 和新 Context Snapshot 创建；旧 PR/Run 保持历史不可变 | 待执行 |
 | DEL-12 | 全链审计 | 查询一个完整案例 | Intake、Context、Run、PR、Merge、CI、Deploy、Verify 每步可关联到同一 Feedback/Cycle/commit | 待执行 |
 
@@ -166,19 +166,19 @@
 
 ## 10. VER — 验证层：PR 门禁、混合执行与 autoMerge
 
-> 依据：[`adr/README.md`](../adr/README.md)（ADR-0001～0012；图谱 ADR-0007、执行环境 ADR-0008、选择与召回 ADR-0009、证据边界 ADR-0010、Planner 回退 ADR-0011、关联模型 ADR-0012）。
+> 依据：[`adr/README.md`](./adr/README.md)（ADR-0001～0013；图谱 ADR-0007、执行环境 ADR-0008、选择与召回 ADR-0009、证据边界 ADR-0010、Planner 回退 ADR-0011、关联模型 ADR-0012、单 Paseo 执行与第二 Provider 准入 ADR-0013）。
 >
-> 签收强度与 DEL 同级：涉及 GitHub、Multica、项目 CI、测试环境、自建执行器的项必须真实运行；本地构造事件只作过程证据，不签收。状态机回归与执行器沙箱的实跑本身即真实运行。Planner/Triage 输出是建议不是判定，其质量不设 P0 验收，随试点样本观察（见 VAL）。
+> 签收强度与 DEL 同级：涉及 GitHub、Paseo、项目 CI、测试环境、自建执行器的项必须真实运行；本地构造事件只作过程证据，不签收。状态机回归与执行器沙箱的实跑本身即真实运行。Planner/Triage 输出是建议不是判定，其质量不设 P0 验收，随试点样本观察（见 VAL）。Multica 不属于本组 P0 运行依赖。
 
 | ID | 验收项 | 验证与证据 | 通过标准 | 结果 |
 |---|---|---|---|---|
 | VER-01 | 门禁状态机迁移 | 参数化状态测试 + 隔离 PostgreSQL 集成 | `PR_READY → VERIFY_RUNNING → GATE_PASS →（autoMerge 或人工 Merge）→ BUILD_RUNNING` 每条合法迁移有测试；未到达 GATE_PASS 时 Merge/CI 事件被拒绝或 DEFERRED；`VERIFY_FAILED` 仅允许重试验证或经授权转新 Coding attempt；无绕过 GATE_PASS 进入 BUILD_RUNNING 的路径 | 待执行 |
 | VER-02 | 证据新鲜度 | 同一 PR 新 push 后投递旧 head SHA 的计划与 Check 证据 | 旧事实全部过期拒绝且留痕，状态不倒退；新 push 触发新计划生成 | 待执行 |
 | VER-03 | Check 来源区分 | 用合并后 CI Check 冒充 PR 验证证据，及反向构造 | 两类来源在归一化层可区分；冒充投递被拒绝并写审计 | 待执行 |
-| VER-04 | Plan Schema | 对 Multica 返回构造合法、缺字段、额外字段、非法 enum | 仅完整合法输出落地为验证计划；其余 `INVALID_OUTPUT` 可重试，不推进状态 | 待执行 |
-| VER-05 | Multica 通道幂等 | 真实 Multica 通道上相同 idempotencyKey 并发/顺序提交 ≥10 次 | 返回同一 Run；Multica 侧只创建一次 | 待执行 |
-| VER-06 | Multica 通道超时/取消/离线 | 真实通道上制造长任务超时、人工取消、通道中断后恢复 | Run 确认停止或恢复后仅继续/重试一次；状态可重试；无重复与卡死 | 待执行 |
-| VER-07 | Multica 凭证隔离 | 检查服务凭证 scope 并尝试越权访问 | 仅可调用验证通道所需接口；不复用 Paseo/Git 凭证；越权被拒并审计 | 待执行 |
+| VER-04 | Plan Schema | 对 Paseo Verification 输出构造合法、缺字段、额外字段、非法 enum | 仅完整合法输出落地为验证计划；其余 `INVALID_OUTPUT` 可重试，不推进状态 | 待执行 |
+| VER-05 | 验证角色 Submit 幂等 | 真实 Paseo 通道上以同一 Verification idempotencyKey 并发/顺序提交 ≥10 次 | 返回同一 ForgeOps/Provider Run；Paseo 只创建一次；不产生第二 Provider 调用 | 待执行 |
+| VER-06 | 验证角色超时/取消/离线 | 真实 Paseo 通道上制造长任务超时、人工取消、daemon 中断后恢复 | Run 确认停止或恢复后仅继续/重试一次；状态可重试；无重复与卡死 | 待执行 |
+| VER-07 | 验证角色权限隔离 | 检查 Verification / Failure Analysis 的输入、工作区和凭证 Scope，并尝试读取仓库外路径或执行 Git 写入 | 只读取经白名单准备的 Diff/图谱/证据；无 Git 写凭证和生产权限；越权被拒并审计 | 待执行 |
 | VER-08 | LLM 禁令（负向） | 构造 Planner/Triage 输出声称 PASS/建议放行/高置信度，同时真实 Check 证据存在失败 | Gate 决策仍为 BLOCK；LLM 字段不进入放行输入；注入尝试留审计 | 待执行 |
 | VER-09 | CI 通道下发 | 真实试点仓库 CI 按验证计划运行并回传 Check Run | 经 Inbox 接收且 `requiredCheckName` + PR + head SHA 精确匹配才推进；非配置 Check 或错误 SHA 拒绝 | 待执行 |
 | VER-10 | 执行器沙箱 | 在自建执行器运行构造的恶意 E2E 任务（访问控制面网络、宿主路径、其他项目凭证） | 全部被拒并记录；一次性容器无残留访问面；产物扫描后入库 | 待执行 |
@@ -187,7 +187,7 @@
 | VER-13 | autoMerge 负向 | 分别制造 WARN、必需证据缺失或失败、SHA 不匹配、策略 false 四类情形 | 四类全部不 Merge；拒绝原因落审计 | 待执行 |
 | VER-14 | autoMerge 开启门槛 | `autoMerge=false` 期间 ≥3 个真实 PR 完整走 VERIFY_RUNNING → GATE_PASS → 人工 Merge，并独立复核 | 3 例的 Feedback/Cycle/计划/证据可追溯；开启 autoMerge 是受审计配置变更，记录变更人与复核人 | 待执行 |
 | VER-15 | 机器 Merge 演练 | 试点开启 autoMerge 后 ≥1 次真实机器身份 Merge | Merge actor 为专用机器身份且与人工可区分；DEL-03 证据链兼容；`WAITING_VERIFY` 人工路径不受影响 | 待执行 |
-| VER-16 | 门禁全链关联（ADR-0012） | 查询一个完整门禁案例 | Feedback/Cycle/Plan/Multica Run/Check/Gate/Merge 全部外键锚定同一 Cycle 且可关联同一 PR head SHA；Check output 回传 plan ID 并经归一化校验；无孤证 | 待执行 |
+| VER-16 | 门禁全链关联（ADR-0012） | 查询一个完整门禁案例 | Feedback/Cycle/Plan/Verification Agent Run/Check/Gate/Merge 全部外键锚定同一 Cycle 且可关联同一 PR head SHA；Check output 回传 plan ID 并经归一化校验；无孤证 | 待执行 |
 | VER-17 | 证据脱敏与保留（ADR-0010） | 对验证证据与一次性栈种子注入敏感样本（截图、日志、种子含测试秘密） | 文本证据入库前经清理链脱敏；种子合成纪律使截图/日志不含真实 PII；保留期按 `qualityPolicy` 过期清理且清理动作留审计、摘要行永久保留 | 待执行 |
 | VER-18 | 影响集计算（ADR-0007） | 构造 diff 命中模块、能力与 Check 映射的用例；构造未命中任何模块的 diff | 影响集包含全部关联 TestSuite 与能力；未命中时回退 `qualityPolicy` 全量必需类别并落审计 | 待执行 |
 | VER-19 | 单调收紧负向（ADR-0007） | 注入 provenance=LLM 的边，分别声称缩小影响集、降低风险档；注入扩张类 LLM 边 | 收缩类注入对影响集与风险无放宽效果；扩张类注入生效；全部注入留审计 | 待执行 |
@@ -198,8 +198,8 @@
 | VER-24 | 选择加法语义（ADR-0009） | 减法 flag 关闭状态下构造影响集极小的 PR 验证 | 必需类别仍全量执行，选择不减少任何类别；flag 开关本身是受审计配置变更 | 待执行 |
 | VER-25 | 召回断路器（ADR-0009） | 构造漏检：PR 子集绿 + 夜间全量挂；再尝试重新启用减法 | 该项目自动降级全量、落审计并通知；重新启用被拒直至 Owner 复核记录；启用前置校验连续 N 次对照召回 100% | 待执行 |
 | VER-26 | 夜间兜底证据链（ADR-0009） | 真实试点 scheduled workflow 全量运行并回流 | 事实绑定 repo+branch+commit+workflow 且签名核验；与 PR Check 同级不可伪造；漏检对照数据可查询 | 待执行 |
-| VER-27 | LLM 输入边界（ADR-0010） | 构造含 trace/视频/原始 payload 的 Triage 请求；检查 Multica 通道模型端点 | 白名单外类型不进入 LLM 请求且留审计；模型端点仅内网 allowlist 可达，公网 LLM API 不可达；截图与脱敏摘要正常进入 | 待执行 |
-| VER-28 | Planner 确定性回退（ADR-0011） | 分别制造 Multica 不可用、超时、重试耗尽、预算达限四情形；同 tree 重 push | 四情形均回退确定性计划且主链推进到 Gate、降级留审计；同 tree 重 push 复用计划不重复计费 | 待执行 |
+| VER-27 | LLM 输入边界（ADR-0010/0013） | 构造含 trace/视频/原始 payload 的 Triage 请求；检查 Paseo 验证角色使用的模型端点 | 白名单外类型不进入 LLM 请求且留审计；模型端点仅内网 allowlist 可达，公网 LLM API 不可达；截图与脱敏摘要正常进入 | 待执行 |
+| VER-28 | Planner 确定性回退（ADR-0011/0013） | 分别制造 Paseo Verification 不可用、超时、重试耗尽、预算达限四情形；同 tree 重 push | 四情形均回退确定性计划且主链推进到 Gate、降级留审计；同 tree 重 push 复用计划不重复计费 | 待执行 |
 
 ## 11. OPS — 部署、可观测与恢复
 
@@ -226,7 +226,7 @@
 | Q-03 | Runtime 契约测试 | `pnpm` 测试报告 | submit/inspect/cancel、幂等、输出、超时、恢复均执行，skipped=0 | 待执行 |
 | Q-04 | SDK 测试 | Core/DOM 单元测试与两试点浏览器报告 | 发布接口均有真实断言；两个试点实际执行；无 echo/skip 占位 | 待执行 |
 | Q-05 | 故障注入套件 | 执行恢复脚本和报告 | 计划中的六类故障全部实际注入并验证 | 待执行 |
-| Q-06 | 真实 E2E | 执行完整链路 | 使用真实 Paseo、Multica 验证通道、Git、CI、测试部署与执行器（如启用 e2e 类别）；模拟项为 0 | 待执行 |
+| Q-06 | 真实 E2E | 执行完整链路 | 使用真实 Paseo（覆盖 Coding/Triage/Verification/Failure Analysis）、Git、CI、测试部署与执行器（如启用 e2e 类别）；模拟项为 0；Multica 不作为 P0 依赖 | 待执行 |
 | Q-07 | 构建产物 | Gateway/Runtime/SDK/镜像构建 | 全部可重复构建；锁文件提交；无依赖临时手工安装 | 待执行 |
 | Q-08 | 工作区清洁 | 验收后 `git status` 与敏感文件扫描 | 仅预期文件变更；无 Token、私钥、运行缓存、未脱敏证据 | 待执行 |
 | Q-09 | 文档一致 | 对照实现复核计划、配置和接入文档 | 状态、接口、命令、端口、环境变量均与实跑一致 | 待执行 |

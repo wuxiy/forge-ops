@@ -5,6 +5,8 @@
 - 决策人：Owner（grill-with-docs 审核会话）
 - 输入材料：`~/Downloads/google/forgeops-v0.2-architecture-upgrade.md`（外部提案，下称"V0.2 提案"）
 
+> 后续修订：本 ADR 中关于 Multica 验证通道的部分已由 ADR-0013 取代；验证层继续并入 2.0，但全部 Agent 角色默认统一走 Paseo。
+
 ## 背景
 
 V0.2 提案（2026-09-16）为 ForgeOps 增加 Verification Layer：Change Intelligence、Risk Engine、AI Test Planner、Test Impact Analysis、Verification Evidence 与 Quality Gate。该提案以 V0.1（Multica 驱动）为基线撰写，未吸收 2.0 实施计划（2026-09-12）的不可变决议，与现行基线在 Multica 主链、运行时插件平台、自动 Merge、技术栈（MyBatis-Flex、Next.js UI）上正面冲突。
