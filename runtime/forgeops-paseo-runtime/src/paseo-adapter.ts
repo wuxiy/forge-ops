@@ -1,7 +1,7 @@
 import { createPaseoClient, type PaseoClient } from '@getpaseo/client'
 import { DaemonClient } from '@getpaseo/client/internal/daemon-client'
 import { createHash } from 'node:crypto'
-import type { PaseoAdapter, PaseoAgentSnapshot, ExecutionRequest } from './types.js'
+import { isVerificationFamily, type PaseoAdapter, type PaseoAgentSnapshot, type ExecutionRequest } from './types.js'
 
 /** The only production adapter. Paseo remains an executor; this service owns request idempotency. */
 export class PaseoSdkAdapter implements PaseoAdapter {
@@ -21,20 +21,39 @@ export class PaseoSdkAdapter implements PaseoAdapter {
 
   async create(input: ExecutionRequest): Promise<PaseoAgentSnapshot> {
     await this.connect()
-    const submitted = await this.withConnectionGuard(this.client.agents.create({
+    // AGT-04 durable idempotency: the daemon does not deduplicate by client message id, so a
+    // resubmission after a lost response first recovers the already-created agent by its
+    // idempotency-key-bearing title instead of creating a second provider run.
+    const title = agentTitle(input)
+    const recovered = await this.findByTitle(title)
+    if (recovered) return snapshot(recovered, recovered.id)
+    const request: Record<string, unknown> = {
       config: { provider: this.config.provider },
       cwd: input.cwd,
       prompt: input.prompt,
       clientMessageId: input.idempotencyKey,
       outputSchema: input.outputSchema,
-      title: `ForgeOps ${input.role}`,
-      worktree: {
-        mode: 'branch-off',
-        newBranch: worktreeBranch(input),
-      },
-    }))
+      title,
+    }
+    if (!isVerificationFamily(input.role)) {
+      // Triage/Coding work on a branch-off worktree of the project repository (AGT-10);
+      // verification-family roles run read-only in isolated task directories without one (VER-07).
+      request.worktree = { mode: 'branch-off', newBranch: worktreeBranch(input) }
+    }
+    const submitted = await this.client.agents.create(request as unknown as Parameters<typeof this.client.agents.create>[0])
     const agent = submitted.current() ?? await submitted.refresh().then((value) => value?.agent ?? null)
     return snapshot(agent, submitted.id)
+  }
+
+  private async findByTitle(title: string): Promise<{ id: string; status: string | null; lastError?: string | { message?: string } | null } | null> {
+    try {
+      const list = await this.client.agents.list()
+      // The daemon carries the title as `name`; the SDK type does not expose it yet.
+      const entry = (list?.entries ?? []).find((item) => (item?.agent as unknown as { name?: string } | null)?.name === title)
+      return (entry?.agent as unknown as { id: string; status: string | null; lastError?: string | { message?: string } | null }) ?? null
+    } catch {
+      return null
+    }
   }
 
   async inspect(providerRunId: string): Promise<PaseoAgentSnapshot | null> {
@@ -112,6 +131,10 @@ function latestAssistantMessage(entries: Array<{ item: { type: string; text?: st
 function worktreeBranch(input: ExecutionRequest): string {
   const suffix = createHash('sha256').update(input.idempotencyKey).digest('hex').slice(0, 12)
   return `forgeops/v2-${input.role.toLowerCase()}-${suffix}`
+}
+
+function agentTitle(input: ExecutionRequest): string {
+  return `ForgeOps ${input.role} ${input.idempotencyKey}`
 }
 
 function snapshot(agent: { id: string; status: string | null; lastError?: string | { message?: string } | null } | null, fallbackId: string): PaseoAgentSnapshot {

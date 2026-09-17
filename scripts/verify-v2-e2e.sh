@@ -238,7 +238,7 @@ PASEO_HOST="$(echo "$PASEO_URL" | sed -E 's#.*://([^:/]+).*#\1#')"
 PASEO_PORT="$(echo "$PASEO_URL" | sed -nE 's#.*:([0-9]+).*#\1#p')"
 PASEO_PORT="${PASEO_PORT:-6767}"
 if nc -z -w 2 "$PASEO_HOST" "$PASEO_PORT" 2>/dev/null; then
-  record SKIPPED "paseo-real-channel" "daemon detected at $PASEO_URL but agent model credentials are not scripted; see AGT/VER evidence"
+  record SKIPPED "paseo-real-channel" "daemon detected at $PASEO_URL; run scripts/verify-v2-paseo-real.sh for the real-channel assertions"
 else
   record SKIPPED "paseo-real-channel" "no Paseo daemon at $PASEO_URL (ENV_BLOCKED: not counted as PASS)"
 fi

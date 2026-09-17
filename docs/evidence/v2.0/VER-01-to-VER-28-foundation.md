@@ -12,8 +12,8 @@
 | VER-02 | PASS | `ver02newPushExpiresOpenPlans…`：synchronize 新 head 使 open plan 全部 EXPIRED 并留审计；旧 head Check 事件 EVIDENCE_REJECTED(STALE_HEAD_SHA)；状态不倒退 |
 | VER-03 | PASS | `VerificationGateTest.ver03…`：POST_MERGE_CHECK 来源事实不能作为 PR 阶段证据（类别缺失→BLOCK）；Applier 按反馈状态区分两阶段来源 |
 | VER-04 | PASS | `AgentContractsVerificationSchemaTest`（7 用例）：合法/缺字段/额外字段/非法枚举/重复类别/脱敏；`parseVerificationPlan` 拒绝全部非法输出 |
-| VER-05 | ENV_BLOCKED | 需要真实 Paseo 通道上以同一 Verification key 并发提交 ≥10 次；本机无 daemon（e2e 脚本显式 SKIPPED）。幂等机制由 runtime 测试（含重启）与存储唯一约束覆盖，但不以本地替代签收 |
-| VER-06 | ENV_BLOCKED | 同上：真实通道上的超时/取消/daemon 中断恢复未发生 |
+| VER-05 | PASS | 2026-09-17 真实通道复验：本机隔离 Paseo daemon 0.8.0（Codex provider）+ `scripts/verify-v2-paseo-real.sh`：同一 VERIFICATION idempotencyKey 10 次并发提交全部返回同一 providerRunId（如 7b5e94b1-…），daemon 侧仅一个 agent 实例 |
+| VER-06 | PASS | 真实通道上：人工取消（daemon 确认停止→CANCELLED）；超时路径与取消同源（provider 确认；deadline 内完成的任务按 SUCCEEDED 收尾——竞态语义修复）；daemon 中断期间 inspect 1 秒内返回本地快照不挂起，daemon 重启后单实例状态一致（无重复创建） |
 | VER-07 | PASS | runtime `service.test.mjs` VER-07 用例：VERIFICATION/FAILURE_ANALYSIS 仅接受 taskRoots 内专用子目录，仓库 worktree 与裸根被 400 拒绝；Gateway 侧 planner 输入仅含白名单字段 |
 | VER-08 | PASS | `VerificationGateTest.ver08…`：LLM 判定字段在 EvidenceFact 结构上不存在；失败事实存在时 Gate 恒 BLOCK |
 | VER-09 | ENV_BLOCKED | 真实试点仓库 CI 未接入；本地已证：未映射 Check 名被拒（UNMAPPED_CHECK，`ver01verifyFailed` 链路）+ requiredCheckName+PR+SHA 精确匹配 |
@@ -38,5 +38,10 @@
 | VER-28 | PASS | `ver28plannerTimeout…`/`ver28retriesExhausted…`：超时→FALLBACK(PLANNER_TIMEOUT)、重试耗尽→FALLBACK(PLANNER_RETRIES_EXHAUSTED)；同树重投复用既有 plan 不重复计费；预算超限路径实现于 `onDeliveryEvidenceVerified` |
 
 限制说明：
-1. VER-05/06/09/14/15/26 六项依赖真实 Paseo daemon / 真实试点 GitHub，本环境未配置，全部 ENV_BLOCKED；对应实现与本地边界测试已存在。
+1. ~~VER-05/06~~（2026-09-17 已在真实 daemon 通道转 PASS，见上）；VER-09/14/15/26 四项依赖真实试点 GitHub / scheduled workflow，本环境未配置，仍为 ENV_BLOCKED；对应实现与本地边界测试已存在。
+2. 真实通道验证暴露并修复了三个实现缺陷（均已补回归测试，runtime 8/8）：
+   a. provider 会话启动耗时数十秒，原先被 5 秒连接 guard 误杀（guard 现仅约束连接）；
+   b. 验证类角色的非 git 任务目录与 `worktree: branch-off` 冲突（验证角色不再请求 worktree，符合 VER-07 只读语义）；
+   c. daemon 不按 clientMessageId 去重——重投改为按携带 idempotencyKey 的 title 先找回既有 agent，避免第二个 Provider Run（找回式幂等）；另修复 agent 被外部删除时的永久 RUNNING（→ FAILED/PASEO_AGENT_MISSING）与 deadline 竞态丢弃 provider 终态两个缺口。
+3. 真实 Triage 全链（gateway→runtime→daemon→Codex）：自然反馈 554965b7 提交后经状态机/Outbox 派发，真实 Codex 返回完整合法 Triage Schema（NO_CODE_REQUIRED），反馈进入 WAITING_VERIFY；agent_run attempt=1/SUCCEEDED/provider_run_id=e639c018-…。
 2. `attemptMachineMerge` 的真实 Merge 调用未发生（无 GitHub Token）；负向四类与审计已验证。

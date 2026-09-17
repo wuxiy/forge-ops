@@ -9,3 +9,4 @@
 - [范围冻结与数据库（S-01/02/04/05/06/08）](S-01-S-08-freeze-and-database.md)
 - [验证层 VER-01～VER-28（隔离 PG + 真实 Docker 沙箱）](VER-01-to-VER-28-foundation.md)
 - [部署、可观测与恢复 OPS-01～OPS-11（真实进程/容器）](OPS-01-to-OPS-11-runtime.md)
+- [真实 Paseo 通道验证脚本](../../../scripts/verify-v2-paseo-real.sh) — VER-05/06、AGT-04/08/09 的 daemon 通道断言（需 daemon 在线）

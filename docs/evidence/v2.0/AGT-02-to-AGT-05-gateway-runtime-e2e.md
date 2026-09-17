@@ -45,3 +45,9 @@
 - AGT-09 PASS：daemon 离线时 Runtime 将 Run 落回 QUEUED（PASEO_UNAVAILABLE，5s 连接超时上限），恢复后仅继续一次（幂等重投）；真实 daemon 通道项见 VER-05/06 ENV_BLOCKED 说明。
 - AGT-10 PASS：每 Coding Run 独立 git worktree + `forgeops/run-*` 分支（`AgentRunDispatcher.ensureCodingWorktree`），重投复用同一 worktree。
 - AGT-11 PASS：超出项目并发上限的提交保持 QUEUED（runtime 并发用例）。
+
+## 2026-09-17 真实通道复验（commit 见 dev 分支 runtime 修复）
+
+- `scripts/verify-v2-paseo-real.sh`（需真实 daemon，缺省 ENV_BLOCKED 退出 3）：runtime-up 401 挑战、VER-05 同 key 10 并发单 Provider Run、VER-06 真实取消、AGT-09 daemon 中断 inspect 有界（1s）——4 PASS/0 FAIL。
+- 真实 Triage 全链：反馈→FeedbackWorkflow→Outbox→Dispatcher→Runtime→Paseo daemon→Codex(gpt-5.5)→合法 Triage Schema→NO_CODE_REQUIRED→WAITING_VERIFY（agent_run SUCCEEDED，provider e639c018）。
+- 修复：找回式幂等（daemon 无 clientMessageId 去重）、验证角色无 worktree、agent 消失终态化、deadline 竞态采纳 provider 终态。

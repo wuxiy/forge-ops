@@ -176,8 +176,8 @@
 | VER-02 | 证据新鲜度 | 同一 PR 新 push 后投递旧 head SHA 的计划与 Check 证据 | 旧事实全部过期拒绝且留痕，状态不倒退；新 push 触发新计划生成 | PASS |
 | VER-03 | Check 来源区分 | 用合并后 CI Check 冒充 PR 验证证据，及反向构造 | 两类来源在归一化层可区分；冒充投递被拒绝并写审计 | PASS |
 | VER-04 | Plan Schema | 对 Paseo Verification 输出构造合法、缺字段、额外字段、非法 enum | 仅完整合法输出落地为验证计划；其余 `INVALID_OUTPUT` 可重试，不推进状态 | PASS |
-| VER-05 | 验证角色 Submit 幂等 | 真实 Paseo 通道上以同一 Verification idempotencyKey 并发/顺序提交 ≥10 次 | 返回同一 ForgeOps/Provider Run；Paseo 只创建一次；不产生第二 Provider 调用 | ENV_BLOCKED |
-| VER-06 | 验证角色超时/取消/离线 | 真实 Paseo 通道上制造长任务超时、人工取消、daemon 中断后恢复 | Run 确认停止或恢复后仅继续/重试一次；状态可重试；无重复与卡死 | ENV_BLOCKED |
+| VER-05 | 验证角色 Submit 幂等 | 真实 Paseo 通道上以同一 Verification idempotencyKey 并发/顺序提交 ≥10 次 | 返回同一 ForgeOps/Provider Run；Paseo 只创建一次；不产生第二 Provider 调用 | PASS |
+| VER-06 | 验证角色超时/取消/离线 | 真实 Paseo 通道上制造长任务超时、人工取消、daemon 中断后恢复 | Run 确认停止或恢复后仅继续/重试一次；状态可重试；无重复与卡死 | PASS |
 | VER-07 | 验证角色权限隔离 | 检查 Verification / Failure Analysis 的输入、工作区和凭证 Scope，并尝试读取仓库外路径或执行 Git 写入 | 只读取经白名单准备的 Diff/图谱/证据；无 Git 写凭证和生产权限；越权被拒并审计 | PASS |
 | VER-08 | LLM 禁令（负向） | 构造 Planner/Triage 输出声称 PASS/建议放行/高置信度，同时真实 Check 证据存在失败 | Gate 决策仍为 BLOCK；LLM 字段不进入放行输入；注入尝试留审计 | PASS |
 | VER-09 | CI 通道下发 | 真实试点仓库 CI 按验证计划运行并回传 Check Run | 经 Inbox 接收且 `requiredCheckName` + PR + head SHA 精确匹配才推进；非配置 Check 或错误 SHA 拒绝 | ENV_BLOCKED |

@@ -260,3 +260,41 @@ test('AGT-09 a daemon outage queues the run instead of failing the workflow', as
   assert.equal(snapshot.failureCategory, 'PASEO_UNAVAILABLE')
   await runtime.close()
 })
+
+test('AGT-04 a lost create response is retried and recovered, not answered by a stale placeholder', async () => {
+  const flaky = new FakePaseo()
+  let failFirst = true
+  flaky.create = async (input) => {
+    if (failFirst) {
+      failFirst = false
+      throw new Error('simulated lost response after provider accepted the task')
+    }
+    flaky.creations += 1
+    const id = `paseo-recovered-${flaky.creations}`
+    flaky.agents.set(id, { id, status: 'running' })
+    return flaky.agents.get(id)
+  }
+  const runtime = await startServer(config(join(root, 'recovery-retry.json')), flaky)
+  try {
+    const address = runtime.server.address()
+    assert.equal(typeof address, 'object')
+    const baseUrl = `http://127.0.0.1:${address.port}`
+    const first = await request(baseUrl, '/v1/runs', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload('evt-retry')),
+    })
+    assert.equal(first.status, 202)
+    assert.equal((await first.json()).state, 'QUEUED')
+
+    const retried = await request(baseUrl, '/v1/runs', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload('evt-retry')),
+    })
+    assert.equal(retried.status, 202)
+    const snapshot = await retried.json()
+    assert.equal(snapshot.state, 'RUNNING')
+    assert.equal(snapshot.providerRunId, 'paseo-recovered-1')
+  } finally {
+    await runtime.close()
+  }
+})

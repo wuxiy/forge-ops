@@ -15,11 +15,15 @@ export class ExecutionService {
     const inFlight = this.submitting.get(input.idempotencyKey)
     if (inFlight) return inFlight
     const existing = this.store.get(input.idempotencyKey)
-    if (existing) return toSnapshot(existing)
+    // A record without a provider id is not a durable answer: a lost create response (the daemon
+    // may already run the task) or a queued-for-outage attempt must be retried through the
+    // recover-by-title adapter path, never by returning a stale placeholder.
+    if (existing && (existing.providerRunId || terminal(existing.state))) return toSnapshot(existing)
     const submission = this.inProjectGate(input.projectId, async () => {
       const durable = this.store.get(input.idempotencyKey)
-      if (durable) return toSnapshot(durable)
-      if (this.activeForProject(input.projectId) >= this.config.maxConcurrentPerProject) return queued(input.idempotencyKey)
+      if (durable && (durable.providerRunId || terminal(durable.state))) return toSnapshot(durable)
+      // A retry of the same unresolved record does not consume another concurrency slot.
+      if (!durable && this.activeForProject(input.projectId) >= this.config.maxConcurrentPerProject) return queued(input.idempotencyKey)
       return this.submitNew(input)
     })
     this.submitting.set(input.idempotencyKey, submission)
@@ -64,11 +68,14 @@ export class ExecutionService {
     await this.store.save(pending)
     try {
       const created = await this.paseo.create(input)
-      const run: PersistedRun = { ...pending, providerRunId: created.id, state: mapState(created.status), updatedAt: new Date().toISOString() }
+      // A recovered or freshly created run gets a fresh deadline from this submission attempt.
+      const run: PersistedRun = { ...pending, providerRunId: created.id, state: mapState(created.status), updatedAt: new Date().toISOString(), deadlineAt: new Date(Date.now() + input.timeoutMs).toISOString() }
       if (created.lastError?.message) run.failureCategory = 'PASEO_ERROR'
       await this.store.save(run)
       return toSnapshot(run)
     } catch (error) {
+      // Observable failure category only; never the prompt or provider payload.
+      console.error('[runtime] submit unavailable:', input.idempotencyKey, error instanceof Error ? error.message : String(error))
       // AGT-09: a daemon outage queues the run for the next reconciliation instead of failing the workflow.
       const queuedForRetry: PersistedRun = { ...pending, state: 'QUEUED', failureCategory: 'PASEO_UNAVAILABLE', updatedAt: new Date().toISOString() }
       await this.store.save(queuedForRetry)
@@ -83,7 +90,12 @@ export class ExecutionService {
     if (!record.providerRunId || terminal(record.state)) return toSnapshot(record)
     try {
       const provider = await this.paseo.inspect(record.providerRunId)
-      if (!provider) return toSnapshot(record)
+      if (!provider) {
+        // The provider no longer knows this run (externally deleted); it can never complete.
+        const vanished: PersistedRun = { ...record, state: 'FAILED', failureCategory: 'PASEO_AGENT_MISSING', updatedAt: new Date().toISOString() }
+        await this.store.save(vanished)
+        return toSnapshot(vanished)
+      }
       const updated: PersistedRun = { ...record, state: mapState(provider.status), updatedAt: new Date().toISOString() }
       if (provider.lastError?.message) updated.failureCategory = 'PASEO_ERROR'
       await this.store.save(updated)
@@ -120,7 +132,15 @@ export class ExecutionService {
       const provider = await this.paseo.inspect(record.providerRunId)
       if (!provider) return toSnapshot(record)
       const state = mapState(provider.status)
-      if (state !== 'CANCELLED' && state !== 'TIMED_OUT') return toSnapshot(record)
+      if (state !== 'CANCELLED' && state !== 'TIMED_OUT') {
+        // The provider finished on its own before the cancellation landed; keep its verdict.
+        if (state === 'SUCCEEDED') {
+          const finished: PersistedRun = { ...record, state: 'SUCCEEDED', updatedAt: new Date().toISOString() }
+          await this.store.save(finished)
+          return toSnapshot(finished, provider.resultJson, provider.resultError)
+        }
+        return toSnapshot(record)
+      }
       const timedOut: PersistedRun = { ...record, state: 'TIMED_OUT', failureCategory: 'RUN_TIMEOUT', updatedAt: new Date().toISOString() }
       await this.store.save(timedOut)
       return toSnapshot(timedOut)
