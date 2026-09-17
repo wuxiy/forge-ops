@@ -66,6 +66,9 @@ scripts/verify-v2-recovery.sh   # 故障注入：PG 中断、Gateway kill -9、R
 scripts/verify-v2-security.sh   # 安全：无默认秘密、Webhook 签名/重放、日志无秘密、私网暴露
 ```
 
+完整落地步骤（镜像构建、env/registry/workspace 准备、Paseo daemon、健康验证、运维与回滚）见
+[2.0 部署指南](docs/deployment-v2.md)。
+
 部署栈（PostgreSQL + Gateway + Runtime，健康检查与卷见文件内注释）：
 
 ```bash
