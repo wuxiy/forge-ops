@@ -1,7 +1,7 @@
 {
   "name": "@forgeops/feedback-core",
-  "version": "0.1.0",
-  "description": "ForgeOps Feedback core - framework-agnostic context collection, request buffer and gateway client",
+  "version": "2.0.0-experimental.0",
+  "description": "ForgeOps 2.0 framework-neutral feedback core",
   "type": "module",
   "main": "./src/index.ts",
   "module": "./src/index.ts",
@@ -18,7 +18,8 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "test": "pnpm build && node --experimental-specifier-resolution=node --test test/*.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

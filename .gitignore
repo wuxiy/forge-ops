@@ -19,3 +19,10 @@ deploy/docker-compose/data/
 
 # OS
 .DS_Store
+
+# AGT-10 per-run worktrees created by integration tests
+gateway/forgeops-gateway-runs/
+# v2 部署机的试点 workspace 与运行 registry（由部署方提供，不入库）
+deploy/docker-compose/workspace/
+deploy/docker-compose/registry-v2/*
+!deploy/docker-compose/registry-v2/.gitkeep

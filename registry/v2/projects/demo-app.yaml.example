@@ -1,0 +1,23 @@
+# v2 运行时项目注册样例（复制为 demo-app.yaml 并按真实仓库填写后启用）
+# workspace-root 由部署环境提供（FORGEOPS_V2_REGISTRY_WORKSPACE_ROOT），
+# repositoryRoot 必须是其中已存在的目录。
+id: demo-app
+enabled: true
+repositoryRoot: demo-app
+allowedPaths:
+  - .
+browserOrigins:
+  - https://demo-app.example
+policy:
+  productionDeploy: false
+github:
+  repository: your-org/demo-app
+  baseBranch: main
+  allowedMergeLogins:
+    - your-merge-login
+  requiredCheckName: forgeops-test
+  testEnvironment: test
+qualityPolicy:
+  categoryMappings:
+    forgeops-test: BUILD
+# 只能收紧：可在 qualityPolicy 增加 requiredCategories（不得删除全局类别）

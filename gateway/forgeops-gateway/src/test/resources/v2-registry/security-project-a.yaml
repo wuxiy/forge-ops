@@ -1,0 +1,19 @@
+id: security-project-a
+enabled: true
+repositoryRoot: .
+allowedPaths:
+  - .
+browserOrigins:
+  - https://app.test
+policy:
+  productionDeploy: false
+github:
+  repository: example/security-project-a
+  baseBranch: main
+  allowedMergeLogins:
+    - forgeops-test-owner
+  requiredCheckName: forgeops-test
+  testEnvironment: test
+qualityPolicy:
+  categoryMappings:
+    forgeops-test: BUILD

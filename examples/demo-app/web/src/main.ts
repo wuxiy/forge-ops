@@ -1,30 +1,17 @@
 import { createApp } from 'vue'
-import { createForgeOps } from '@forgeops/feedback-vue'
+import { initForgeOpsFeedback } from '@forgeops/feedback-dom'
 import App from './App.vue'
 import './style.css'
 
-/** 启动时拉取后端版本（SDK 提交反馈时自动附带）。 */
-const backendInfo: { version?: string; commit?: string } = {}
-fetch('/api/version')
-  .then((r) => r.json())
-  .then((v) => {
-    backendInfo.version = v.version
-    backendInfo.commit = v.commit
-  })
-  .catch(() => {
-    /* 版本获取失败不阻断应用 */
-  })
+const app = createApp(App)
+app.mount('#app')
 
-const forgeops = createForgeOps({
+initForgeOpsFeedback({
   gatewayUrl: (import.meta.env.VITE_FORGEOPS_GATEWAY as string) || 'http://localhost:8080',
   projectId: 'demo-app',
-  environment: 'test',
-  getReporter() {
-    const name = localStorage.getItem('demo-user')
-    return name ? { id: name, name } : null
+  async getToken() {
+    const response = await fetch('/api/forgeops/token')
+    if (!response.ok) throw new Error('Host did not issue a ForgeOps token')
+    return response.text()
   },
-  getFrontendInfo: () => ({ version: __APP_VERSION__, commit: __APP_COMMIT__ }),
-  getBackendInfo: () => backendInfo,
 })
-
-createApp(App).use(forgeops.plugin).mount('#app')

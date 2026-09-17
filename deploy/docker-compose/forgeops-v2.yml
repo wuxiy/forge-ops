@@ -1,0 +1,113 @@
+# ForgeOps 2.0 部署栈（OPS-01..OPS-05）
+#
+# 前置：
+#   1. 仓库根目录构建镜像：
+#      docker build -t forgeops-gateway:v2 -f gateway/forgeops-gateway/Dockerfile .
+#      docker build -t forgeops-runtime:v2 -f runtime/forgeops-paseo-runtime/Dockerfile .
+#   2. 复制 forgeops-v2.env.example 为 forgeops-v2.env 并填入真实值；
+#      缺失必需 Secret 时服务必须启动失败（OPS-03），不允许默认秘密。
+#   3. docker network create forgeops-internal（或让 compose 自动创建）
+#
+# 启动：
+#   docker compose -f deploy/docker-compose/forgeops-v2.yml --env-file deploy/docker-compose/forgeops-v2.env up -d
+name: forgeops-v2
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${FORGEOPS_DB_USER:?FORGEOPS_DB_USER is required}
+      POSTGRES_PASSWORD: ${FORGEOPS_DB_PASSWORD:?FORGEOPS_DB_PASSWORD is required}
+      POSTGRES_DB: ${FORGEOPS_DB_NAME:?FORGEOPS_DB_NAME is required}
+    volumes:
+      - forgeops-v2-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${FORGEOPS_DB_USER} -d ${FORGEOPS_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - forgeops-internal
+    # PostgreSQL 只在内部网络可达，不发布端口（OPS-04）
+
+  gateway:
+    image: forgeops-gateway:v2
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FORGEOPS_DB_URL: jdbc:postgresql://postgres:5432/${FORGEOPS_DB_NAME}
+      FORGEOPS_DB_USER: ${FORGEOPS_DB_USER:?FORGEOPS_DB_USER is required}
+      FORGEOPS_DB_PASSWORD: ${FORGEOPS_DB_PASSWORD:?FORGEOPS_DB_PASSWORD is required}
+      FORGEOPS_V2_REGISTRY_PATH: ${FORGEOPS_V2_REGISTRY_PATH:-/app/registry-v2}
+      FORGEOPS_V2_REGISTRY_WORKSPACE_ROOT: /var/forgeops/workspaces
+      FORGEOPS_V2_SECURITY_TOKEN_SECRET: ${FORGEOPS_V2_SECURITY_TOKEN_SECRET:?token secret is required}
+      FORGEOPS_RUNTIME_URL: http://runtime:7676
+      FORGEOPS_RUNTIME_SERVICE_TOKEN: ${FORGEOPS_RUNTIME_SERVICE_TOKEN:?runtime service token is required}
+      # AGT-03: 容器运行在 forgeops-internal 私有网络内，不发布端口
+      FORGEOPS_RUNTIME_PRIVATE_NETWORK: "true"
+      FORGEOPS_RUNTIME_HOST: 0.0.0.0
+      FORGEOPS_V2_GITHUB_ENABLED: ${FORGEOPS_V2_GITHUB_ENABLED:-false}
+      FORGEOPS_V2_GITHUB_WEBHOOK_SECRET: ${FORGEOPS_V2_GITHUB_WEBHOOK_SECRET:-}
+      FORGEOPS_V2_GITHUB_API_TOKEN: ${FORGEOPS_V2_GITHUB_API_TOKEN:-}
+      FORGEOPS_V2_GITHUB_MACHINE_MERGE_TOKEN: ${FORGEOPS_V2_GITHUB_MACHINE_MERGE_TOKEN:-}
+      FORGEOPS_V2_PLANNER_ENABLED: ${FORGEOPS_V2_PLANNER_ENABLED:-true}
+      FORGEOPS_V2_EXECUTOR_ENABLED: ${FORGEOPS_V2_EXECUTOR_ENABLED:-false}
+      FORGEOPS_V2_EXECUTOR_TASK_ROOT: /var/lib/forgeops/executor
+      FORGEOPS_V2_EXECUTOR_IMAGES: ${FORGEOPS_V2_EXECUTOR_IMAGES:-}
+    volumes:
+      - ./registry-v2:/app/registry-v2:ro
+      - ./workspace:/var/forgeops/workspaces
+      - forgeops-v2-executor:/var/lib/forgeops/executor
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health/readiness | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    ports:
+      # 仅绑定回环/内网（OPS-04）：对外经反向代理或 Tailscale 暴露
+      - "127.0.0.1:18093:8080"
+    networks:
+      - forgeops-internal
+
+  runtime:
+    image: forgeops-runtime:v2
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    environment:
+      FORGEOPS_RUNTIME_SERVICE_TOKEN: ${FORGEOPS_RUNTIME_SERVICE_TOKEN:?runtime service token is required}
+      # AGT-03: 容器运行在 forgeops-internal 私有网络内，不发布端口
+      FORGEOPS_RUNTIME_PRIVATE_NETWORK: "true"
+      FORGEOPS_RUNTIME_HOST: 0.0.0.0
+      FORGEOPS_RUNTIME_DATA_FILE: /var/lib/forgeops-runtime/runs.json
+      FORGEOPS_RUNTIME_ALLOWED_ROOTS: /var/forgeops/workspaces
+      FORGEOPS_RUNTIME_TASK_ROOTS: /var/lib/forgeops/executor/planner
+      FORGEOPS_PASEO_URL: ${FORGEOPS_PASEO_URL:-ws://paseo-daemon:6767/ws}
+      FORGEOPS_PASEO_PASSWORD: ${FORGEOPS_PASEO_PASSWORD:-}
+      FORGEOPS_PASEO_PROVIDER: ${FORGEOPS_PASEO_PROVIDER:-codex/gpt-5.5}
+    volumes:
+      - ./workspace:/var/forgeops/workspaces
+      - forgeops-v2-executor:/var/lib/forgeops/executor
+      - forgeops-v2-runtime-data:/var/lib/forgeops-runtime
+    healthcheck:
+      # 401 证明服务在线且强制服务凭证（AGT-03）
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:7676/v1/runs/health-probe',r=>process.exit(r.statusCode===401?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    # Runtime 不发布任何端口：仅内部网络内由 Gateway 调用（AGT-03/OPS-04）
+    networks:
+      - forgeops-internal
+
+volumes:
+  forgeops-v2-pgdata:
+  forgeops-v2-executor:
+  forgeops-v2-runtime-data:
+
+networks:
+  forgeops-internal:
+    name: forgeops-internal

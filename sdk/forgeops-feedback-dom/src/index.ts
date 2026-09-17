@@ -8,33 +8,36 @@ export { mountWidget }
 
 export interface ForgeOpsFeedbackHandle {
   core: FeedbackCore
-  widget: MountedWidget | null
   open(): void
   close(): void
   destroy(): void
 }
 
+const HANDLE_KEY = '__forgeopsV2Handle__'
+
 /**
- * 一行接入（任意框架 / 无框架）：初始化采集并自动在 body 挂载反馈入口。
- *
- * initForgeOpsFeedback({ gatewayUrl, projectId, environment: 'test' })
+ * The single 2.0 initialization entrypoint. Repeated initialization returns the existing handle;
+ * destroy restores browser hooks and removes the only DOM mount.
  */
 export function initForgeOpsFeedback(options: ForgeOpsOptions, target?: HTMLElement): ForgeOpsFeedbackHandle {
+  const root = window as Window & { [HANDLE_KEY]?: ForgeOpsFeedbackHandle }
+  if (root[HANDLE_KEY]) return root[HANDLE_KEY]!
   const core = new FeedbackCore(options)
   core.start()
-  let widget: MountedWidget | null = null
-  if (core.enabled) {
-    const host = target ?? document.body.appendChild(document.createElement('div'))
-    widget = mountWidget(host, core)
-  }
-  return {
+  const host = target ?? document.body.appendChild(document.createElement('div'))
+  const createdHost = target === undefined
+  const widget: MountedWidget | null = core.enabled ? mountWidget(host, core) : null
+  const handle: ForgeOpsFeedbackHandle = {
     core,
-    widget,
     open: () => widget?.open(),
     close: () => widget?.close(),
     destroy: () => {
       widget?.destroy()
-      widget = null
+      core.stop()
+      if (createdHost) host.remove()
+      delete root[HANDLE_KEY]
     },
   }
+  root[HANDLE_KEY] = handle
+  return handle
 }

@@ -5,7 +5,7 @@ spring:
   application:
     name: forgeops-gateway
   datasource:
-    url: ${FORGEOPS_DB_URL:jdbc:postgresql://172.16.65.59:5432/forgeops}
+    url: ${FORGEOPS_DB_URL:jdbc:postgresql://172.16.65.59:5432/forgeops_v2}
     username: ${FORGEOPS_DB_USER:forgeops}
     password: ${FORGEOPS_DB_PASSWORD:forgeops}
   jpa:
@@ -16,26 +16,38 @@ spring:
     enabled: true
 
 forgeops:
-  # Project Registry：monorepo 内 registry/projects 目录（相对 gateway 运行目录或绝对路径）
-  registry:
-    path: ${FORGEOPS_REGISTRY_PATH:../../registry/projects}
-  multica:
-    base-url: ${FORGEOPS_MULTICA_BASE_URL:http://172.16.65.59:18080}
-    token: ${FORGEOPS_MULTICA_TOKEN:}
-    workspace-id: ${FORGEOPS_MULTICA_WORKSPACE_ID:}
-    # web 前端地址，用于拼接 Issue URL
-    app-url: ${FORGEOPS_MULTICA_APP_URL:http://172.16.65.59:13000}
-  callback:
-    # 回调共享 secret，空 = 不校验（仅内网调试）
-    secret: ${FORGEOPS_CALLBACK_SECRET:forgeops-dev-secret}
-  poller:
-    enabled: ${FORGEOPS_POLLER_ENABLED:true}
-    fixed-delay-ms: 10000
-  storage:
-    screenshot-dir: ${FORGEOPS_SCREENSHOT_DIR:./data/screenshots}
-  pii:
-    # 与 policy/pii-policy.yaml 对齐的兜底配置（优先读 policy 文件）
+  v2:
+    # 2.0 只使用新数据库；不读取 V0.1 表或历史回调。
     enabled: true
+    runtime:
+      base-url: ${FORGEOPS_RUNTIME_URL:}
+      service-token: ${FORGEOPS_RUNTIME_SERVICE_TOKEN:}
+    github:
+      enabled: ${FORGEOPS_V2_GITHUB_ENABLED:false}
+      webhook-secret: ${FORGEOPS_V2_GITHUB_WEBHOOK_SECRET:}
+      api-base-url: ${FORGEOPS_V2_GITHUB_API_BASE_URL:https://api.github.com}
+      api-token: ${FORGEOPS_V2_GITHUB_API_TOKEN:}
+      machine-merge-token: ${FORGEOPS_V2_GITHUB_MACHINE_MERGE_TOKEN:}
+      machine-merge-login: ${FORGEOPS_V2_GITHUB_MACHINE_MERGE_LOGIN:forgeops-machine}
+    verification:
+      planner-enabled: ${FORGEOPS_V2_PLANNER_ENABLED:true}
+      planner-max-attempts: ${FORGEOPS_V2_PLANNER_MAX_ATTEMPTS:2}
+      planner-budget-per-cycle: ${FORGEOPS_V2_PLANNER_BUDGET:2}
+      executor-enabled: ${FORGEOPS_V2_EXECUTOR_ENABLED:false}
+      executor-task-root: ${FORGEOPS_V2_EXECUTOR_TASK_ROOT:/var/lib/forgeops/executor}
+      executor-allowed-images: ${FORGEOPS_V2_EXECUTOR_IMAGES:}
+    reconciliation:
+      fixed-delay-ms: ${FORGEOPS_V2_RECONCILIATION_MS:5000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
 
 logging:
   level:

@@ -1,7 +1,7 @@
 {
   "name": "@forgeops/feedback-dom",
-  "version": "0.1.0",
-  "description": "ForgeOps Feedback DOM widget - framework-agnostic UI mounted anywhere (used by vue/vue2/react wrappers)",
+  "version": "2.0.0-experimental.0",
+  "description": "ForgeOps 2.0 native DOM feedback entrypoint",
   "type": "module",
   "main": "./src/index.ts",
   "module": "./src/index.ts",

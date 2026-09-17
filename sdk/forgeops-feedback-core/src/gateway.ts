@@ -1,63 +1,33 @@
-import type { FeedbackDetail, FeedbackListItem, FeedbackSubmission, RequestSummary } from './types'
+import type { BrowserContext, FeedbackDraft, FeedbackView, ForgeOpsOptions } from './types'
 
-/** ForgeOps Gateway API 客户端（§9.3）。 */
+/** Minimal client for the v2 feedback boundary; it has no anonymous-name or v1 fallback mode. */
 export class ForgeOpsGatewayClient {
-  constructor(private baseUrl: string) {}
+  constructor(private readonly options: Pick<ForgeOpsOptions, 'gatewayUrl' | 'projectId' | 'getToken'>) {}
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${this.baseUrl.replace(/\/$/, '')}${path}`, {
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+  async submit(draft: FeedbackDraft, browserContext: BrowserContext): Promise<FeedbackView> {
+    return this.request('', { method: 'POST', body: JSON.stringify({ ...draft, browserContext }) })
+  }
+
+  async mine(): Promise<FeedbackView[]> {
+    return this.request('/mine')
+  }
+
+  async get(feedbackId: string): Promise<FeedbackView> {
+    return this.request(`/${encodeURIComponent(feedbackId)}`)
+  }
+
+  async reopen(feedbackId: string, reason: string): Promise<FeedbackView> {
+    return this.request(`/${encodeURIComponent(feedbackId)}/reopen`, { method: 'POST', body: JSON.stringify({ reason }) })
+  }
+
+  private async request<T>(suffix: string, init: RequestInit = {}): Promise<T> {
+    const token = await this.options.getToken()
+    if (!token) throw new Error('ForgeOps requires a host-issued identity token')
+    const response = await fetch(`${this.options.gatewayUrl.replace(/\/$/, '')}/api/v2/projects/${encodeURIComponent(this.options.projectId)}/feedback${suffix}`, {
       ...init,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init.headers ?? {}) },
     })
-    if (!res.ok) {
-      let message = `HTTP ${res.status}`
-      try {
-        const body = await res.json()
-        if (body?.message) message = body.message
-      } catch {
-        /* ignore */
-      }
-      throw new Error(message)
-    }
-    return res.json() as Promise<T>
-  }
-
-  submitFeedback(payload: FeedbackSubmission): Promise<{ id: string; status: string }> {
-    return this.request('/api/v1/feedback', { method: 'POST', body: JSON.stringify(payload) })
-  }
-
-  listMyFeedback(reporter: string, projectId: string): Promise<FeedbackListItem[]> {
-    const query = `reporter=${encodeURIComponent(reporter)}&projectId=${encodeURIComponent(projectId)}`
-    return this.request(`/api/v1/feedback?${query}`)
-  }
-
-  getFeedback(id: string): Promise<FeedbackDetail> {
-    return this.request(`/api/v1/feedback/${encodeURIComponent(id)}`)
-  }
-
-  comment(id: string, content: string): Promise<unknown> {
-    return this.request(`/api/v1/feedback/${encodeURIComponent(id)}/comment`, {
-      method: 'POST',
-      body: JSON.stringify({ content }),
-    })
-  }
-
-  verifyPass(id: string, verifierName: string, comment?: string): Promise<unknown> {
-    return this.request(`/api/v1/feedback/${encodeURIComponent(id)}/verify`, {
-      method: 'POST',
-      body: JSON.stringify({ result: 'PASS', verifierName, comment }),
-    })
-  }
-
-  verifyFail(
-    id: string,
-    verifierName: string,
-    comment: string,
-    extra?: { requests?: RequestSummary[]; consoleErrors?: string[] },
-  ): Promise<unknown> {
-    return this.request(`/api/v1/feedback/${encodeURIComponent(id)}/reopen`, {
-      method: 'POST',
-      body: JSON.stringify({ verifierName, comment, requests: extra?.requests || [], consoleErrors: extra?.consoleErrors || [] }),
-    })
+    if (!response.ok) throw new Error(`ForgeOps request failed (${response.status})`)
+    return response.json() as Promise<T>
   }
 }
